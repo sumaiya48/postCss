@@ -1,23 +1,45 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
+import { FiSearch, FiChevronDown, FiChevronUp, FiDownload } from "react-icons/fi";
+import { CSVLink } from "react-csv";
+import * as XLSX from "xlsx";
 
 export default function Categories() {
+  const [allCategories, setAllCategories] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [parentCategoryId, setParentCategoryId] = useState(null);
-  const [newParentName, setNewParentName] = useState("");
+  const [categoryName, setCategoryName] = useState("");
+  const [editCategory, setEditCategory] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showSubCategoryModal, setShowSubCategoryModal] = useState(false);
+  const [subCategoryName, setSubCategoryName] = useState("");
+  const [subCategoryParentId, setSubCategoryParentId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortOrder, setSortOrder] = useState("default");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [expandedCategoryId, setExpandedCategoryId] = useState(null);
+  const dropdownRef = useRef(null);
 
   const token = localStorage.getItem("authToken");
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchCategories = async () => {
     try {
       const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
-      setCategories(res.data.data.categories || []);
+      const all = res.data.data.categories;
+      setAllCategories(all);
+      applyFilters(all, searchTerm, sortOrder);
     } catch (err) {
-      console.error(err);
-      Swal.fire("Error!", "Failed to fetch categories!", "error");
+      Swal.fire("Error", "Could not load categories", "error");
     }
   };
 
@@ -25,258 +47,280 @@ export default function Categories() {
     fetchCategories();
   }, []);
 
-  const handleAddOrUpdateCategory = async () => {
+  useEffect(() => {
+    applyFilters(allCategories, searchTerm, sortOrder);
+  }, [searchTerm, sortOrder]);
+
+  const applyFilters = (data, search, sort) => {
+    let filtered = [...data].filter((cat) => cat.parentCategoryId === null);
+    if (search) {
+      filtered = filtered.filter((cat) =>
+        cat.name.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    if (sort === "asc") {
+      filtered.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sort === "desc") {
+      filtered.sort((a, b) => b.name.localeCompare(a.name));
+    }
+    setCategories(filtered);
+  };
+
+  const handleAddCategory = async () => {
+    if (!categoryName.trim()) return;
     try {
-      const payload = {
-        name: newCategoryName.trim(),
-        parentCategoryId: parentCategoryId ? Number(parentCategoryId) : null
-      };
-
-      if (editingCategory) {
-        await axios.put("https://test.api.dpmsign.com/api/product-category", {
-          categoryId: editingCategory.categoryId,
-          name: payload.name,
-          parentCategoryId: payload.parentCategoryId
-        }, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        Swal.fire("Success!", "Category updated successfully!", "success");
-      } else {
-        await axios.post("https://test.api.dpmsign.com/api/product-category/create", payload, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        Swal.fire("Success!", "Category added successfully!", "success");
-      }
-
+      await axios.post(
+        "https://test.api.dpmsign.com/api/product-category/create",
+        { name: categoryName },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setCategoryName("");
       fetchCategories();
-      resetForm();
-    } catch (err) {
-      console.error("Failed to save category:", err?.response?.data || err);
-      Swal.fire("Error!", err?.response?.data?.message || "Failed to save category!", "error");
+    } catch {
+      Swal.fire("Error", "Failed to add category", "error");
     }
   };
 
-  const handleAddParentCategory = async () => {
-  try {
-    const payload = {
-      name: newParentName.trim()
-      // parentCategoryId will not be sent for parent
-    };
-
-    await axios.post("https://test.api.dpmsign.com/api/product-category/create", payload, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      }
+  const handleDelete = async (categoryId) => {
+    const confirm = await Swal.fire({
+      title: "Are you sure?",
+      text: "This will delete the category.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, delete it!",
     });
 
-    Swal.fire("Success!", "Parent category added!", "success");
+    if (confirm.isConfirmed) {
+      try {
+        await axios.delete(
+          `https://test.api.dpmsign.com/api/product-category/${categoryId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        fetchCategories();
+        Swal.fire("Deleted!", "Category deleted.", "success");
+      } catch {
+        Swal.fire("Error", "Delete failed", "error");
+      }
+    }
+  };
+
+  const handleEditCategory = async () => {
+    try {
+      await axios.put(
+        "https://test.api.dpmsign.com/api/product-category/",
+        {
+          categoryId: editCategory.categoryId,
+          name: editCategory.name,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setShowEditModal(false);
+      fetchCategories();
+    } catch {
+      Swal.fire("Error", "Update failed", "error");
+    }
+  };
+
+  const handleAddSubCategory = async () => {
+  if (!subCategoryName.trim()) return;
+  try {
+    await axios.post(
+      "https://test.api.dpmsign.com/api/product-category/create",
+      {
+        name: subCategoryName,
+        parentCategoryId: subCategoryParentId,
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    setSubCategoryName("");
+    setShowSubCategoryModal(false);
     fetchCategories();
-    setNewParentName("");
-  } catch (err) {
-    console.error("Failed to save parent category:", err?.response?.data || err);
-    Swal.fire("Error!", err?.response?.data?.message || "Failed to save parent category!", "error");
+    Swal.fire("Success", "Subcategory added successfully!", "success"); // ✅ Alert added here
+  } catch {
+    Swal.fire("Error", "Subcategory add failed", "error");
   }
 };
 
+  const csvData = categories.flatMap((cat) => [
+    { Category: cat.name, Subcategory: "" },
+    ...cat.subCategories.map((sub) => ({
+      Category: cat.name,
+      Subcategory: sub.name,
+    })),
+  ]);
 
-  const handleEditCategory = (category) => {
-    setEditingCategory(category);
-    setNewCategoryName(category.name);
-    setParentCategoryId(category.parentCategoryId || null);
+  const exportToExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(csvData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Categories");
+    XLSX.writeFile(workbook, "categories.xlsx");
   };
 
-  const handleDeleteCategory = async (categoryId) => {
-    try {
-      const result = await Swal.fire({
-        title: "Are you sure?",
-        text: "This category will be deleted!",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#3085d6",
-        cancelButtonColor: "#d33",
-        confirmButtonText: "Yes, delete it!"
-      });
-
-      if (result.isConfirmed) {
-        await axios.delete(`https://test.api.dpmsign.com/api/product-category/${categoryId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        Swal.fire("Deleted!", "Category deleted!", "success");
-        fetchCategories();
-      }
-    } catch (err) {
-      console.error("Failed to delete category:", err?.response?.data || err);
-      Swal.fire("Error!", err?.response?.data?.message || "Failed to delete category!", "error");
-    }
+  const getSortLabel = () => {
+    if (sortOrder === "asc") return "Sort A → Z";
+    if (sortOrder === "desc") return "Sort Z → A";
+    return "Sort: Default";
   };
 
-  const resetForm = () => {
-    setEditingCategory(null);
-    setNewCategoryName("");
-    setParentCategoryId(null);
-  };
+  return (
+    <div className="min-h-screen bg-gray-100 py-12 px-6 md:px-12">
+      <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl p-10">
+        <h1 className="text-3xl font-extrabold text-center text-indigo-700 mb-10 tracking-wide">
+          Manage Categories
+        </h1>
 
-  const renderSubCategories = (parentId) => {
-    return categories
-      .filter((cat) => cat.parentCategoryId === parentId)
-      .map((sub) => (
-        <div key={sub.categoryId} className="ml-6 mt-2 border-l pl-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="font-semibold">{sub.name}</p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5 mb-6">
+          <div className="flex gap-4">
+            <div className="relative w-full md:w-[200px]">
+              <input
+                type="text"
+                placeholder="Search category..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-xl border border-gray-300 pl-12 pr-4 py-2 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 shadow-sm transition"
+              />
+              <FiSearch className="absolute left-4 top-2 text-gray-400" size={18} />
             </div>
-            <div className="space-x-2">
+
+            <div className="relative" ref={dropdownRef}>
               <button
-                onClick={() => handleEditCategory(sub)}
-                className="btn btn-xs btn-warning"
+                onClick={() => setDropdownOpen((prev) => !prev)}
+                className="flex items-center gap-2 rounded-xl border border-gray-300 px-5 py-1 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 shadow-sm transition font-semibold text-gray-700 select-none"
               >
-                Edit
+                {getSortLabel()}
+                {dropdownOpen ? <FiChevronUp size={18} /> : <FiChevronDown size={18} />}
               </button>
-              <button
-                onClick={() => handleDeleteCategory(sub.categoryId)}
-                className="btn btn-xs btn-error"
-              >
-                Delete
+
+              {dropdownOpen && (
+                <ul className="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-xl shadow-lg z-50 divide-y divide-gray-100">
+                  <li className="px-4 py-3 cursor-pointer hover:bg-indigo-100 rounded-t-xl" onClick={() => { setSortOrder("default"); setDropdownOpen(false); }}>Default</li>
+                  <li className="px-4 py-3 cursor-pointer hover:bg-indigo-100" onClick={() => { setSortOrder("asc"); setDropdownOpen(false); }}>Sort A → Z</li>
+                  <li className="px-4 py-3 cursor-pointer hover:bg-indigo-100 rounded-b-xl" onClick={() => { setSortOrder("desc"); setDropdownOpen(false); }}>Sort Z → A</li>
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-4">
+            <button onClick={exportToExcel} className="flex items-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 text-white px-5 py-3 shadow-md transition">
+              <FiDownload size={18} /> Export Excel
+            </button>
+            <CSVLink data={csvData} filename="categories.csv" className="flex items-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 text-white px-5 py-3 shadow-md transition">
+              <FiDownload size={18} /> Export CSV
+            </CSVLink>
+          </div>
+        </div>
+
+        <div className="bg-indigo-50 rounded-xl px-8 py-6 mb-6 border border-indigo-200 shadow-inner">
+          <h2 className="text-xl font-semibold text-indigo-800 mb-4">➕ Add New Category</h2>
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <input
+              value={categoryName}
+              onChange={(e) => setCategoryName(e.target.value)}
+              placeholder="Enter category name"
+              className="input input-bordered w-full max-w-md rounded-xl border-indigo-300 shadow-sm focus:ring-indigo-400"
+            />
+            <button className="btn btn-info text-white rounded-xl shadow-md hover:shadow-lg transition" onClick={handleAddCategory}>
+              Add Category
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {categories.map((cat) => (
+            <div key={cat.categoryId} className="bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition">
+              <div className="flex justify-between items-center px-8 py-5 cursor-pointer" onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)}>
+                <span className="text-xl font-semibold text-indigo-800">
+  {cat.name}
+  {cat.subCategories?.length > 0 && (
+    <span className="ml-2 text-sm text-indigo-500">
+      ({cat.subCategories.length} Subcategories)
+    </span>
+  )}
+</span>
+
+                <div className="flex gap-3">
+                  <button onClick={(e) => { e.stopPropagation(); setEditCategory(cat); setShowEditModal(true); }} className="btn btn-sm btn-outline rounded-xl shadow-sm hover:shadow-md transition">✏️ Edit</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleDelete(cat.categoryId); }} className="btn btn-sm btn-error rounded-xl shadow-sm hover:shadow-md transition">🗑️ Delete</button>
+                  <button onClick={(e) => { e.stopPropagation(); setSubCategoryParentId(cat.categoryId); setShowSubCategoryModal(true); }} className="btn btn-sm btn-accent rounded-xl shadow-sm hover:shadow-md transition">➕ Subcategory</button>
+                </div>
+              </div>
+              {expandedCategoryId === cat.categoryId && cat.subCategories?.length > 0 && (
+                <div className="bg-indigo-50 px-10 py-6 text-gray-700 rounded-b-2xl border-t border-indigo-300 space-y-2">
+                  <ul className="list-disc pl-6 space-y-2">
+                    {cat.subCategories.map((sub) => (
+                      <li key={sub.categoryId} className="flex justify-between items-center">
+                        <span>{sub.name}</span>
+                        <div className="flex gap-2">
+                          <button className="btn btn-xs btn-outline rounded-xl shadow-sm" onClick={() => { setEditCategory(sub); setShowEditModal(true); }}>Edit</button>
+                          <button className="btn btn-xs btn-error rounded-xl shadow-sm" onClick={() => handleDelete(sub.categoryId)}>Delete</button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+                {/* Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <div className="bg-white p-6 rounded w-[300px] space-y-4">
+            <h3 className="text-lg font-semibold">Edit Category</h3>
+            <input
+              value={editCategory.name}
+              onChange={(e) =>
+                setEditCategory({ ...editCategory, name: e.target.value })
+              }
+              className="input input-bordered w-full"
+            />
+            <div className="flex justify-end gap-2">
+              <button className="btn" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handleEditCategory}>
+                Update
               </button>
             </div>
           </div>
         </div>
-      ));
-  };
+      )}
 
-  return (
-    <div className="p-6 space-y-6">
-      {/* Add/Edit Category */}
-      <div className="border p-4 rounded">
-        <h2 className="text-xl font-bold mb-3">
-          {editingCategory ? "Edit Category" : "Add New Subcategory"}
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-          <input
-            type="text"
-            placeholder="Category Name"
-            className="input input-bordered"
-            value={newCategoryName}
-            onChange={(e) => setNewCategoryName(e.target.value)}
-          />
-          <select
-            className="select select-bordered"
-            value={parentCategoryId || ""}
-            onChange={(e) => setParentCategoryId(e.target.value ? Number(e.target.value) : null)}
-          >
-           <option value="">-- Parent Category --</option>
-{[...new Map(
-    categories
-      .filter(cat => cat.parentCategory)   // only category jeta te parent ache
-      .map(cat => [cat.parentCategory.categoryId, cat.parentCategory])  // map to [id, obj]
-  ).values()]  // Map e unique hoye jabe
-  .map((parent) => (
-    <option key={parent.categoryId} value={parent.categoryId}>
-      {parent.name}
-    </option>
-  ))}
-
-          </select>
-        </div>
-        <div className="space-x-2">
-          <button
-            onClick={handleAddOrUpdateCategory}
-            className="btn btn-primary"
-          >
-            {editingCategory ? "Update" : "Add"}
-          </button>
-          {editingCategory && (
-            <button onClick={resetForm} className="btn btn-secondary">
-              Cancel
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Add Parent Category */}
-      <div className="border p-4 rounded">
-        <h2 className="text-xl font-bold mb-3">Add Parent Category</h2>
-        <div className="flex flex-wrap gap-4 items-center">
-          <input
-            type="text"
-            placeholder="Parent Category Name"
-            className="input input-bordered flex-1"
-            value={newParentName}
-            onChange={(e) => setNewParentName(e.target.value)}
-          />
-          <button
-            onClick={handleAddParentCategory}
-            className="btn btn-primary"
-          >
-            Add Parent
-          </button>
-        </div>
-      </div>
-
-
-      {/* Category List Table */}  
-<div className="mt-10 border rounded shadow">
-  <h2 className="text-xl font-bold p-4 border-b">All Categories</h2>
-  <div className="overflow-x-auto">
-    <table className="table table-zebra w-full">
-      <thead className="bg-base-200">
-        <tr>
-          <th>#</th>
-          <th>Category Name</th>
-          <th>Parent Category</th>
-          <th>Products Count</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {categories.map((cat, index) => (
-          <tr key={cat.categoryId}>
-            <td>{index + 1}</td>
-            <td className="font-semibold">{cat.name}</td>
-            <td>
-              {cat.parentCategory
-                ? cat.parentCategory.name
-                : "No Parent"}
-            </td>
-            <td>{cat.products?.length || 0}</td>
-            <td className="space-x-2">
-              <button
-                onClick={() => handleEditCategory(cat)}
-                className="btn btn-xs btn-warning"
-              >
-                Edit
+      {/* Subcategory Modal */}
+      {showSubCategoryModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <div className="bg-white p-6 rounded w-[300px] space-y-4">
+            <h3 className="text-lg font-semibold">Add Subcategory</h3>
+            <input
+              value={subCategoryName}
+              onChange={(e) => setSubCategoryName(e.target.value)}
+              className="input input-bordered w-full"
+              placeholder="Subcategory Name"
+            />
+            <div className="flex justify-end gap-2">
+              <button className="btn" onClick={() => setShowSubCategoryModal(false)}>
+                Cancel
               </button>
-              <button
-                onClick={() => handleDeleteCategory(cat.categoryId)}
-                className="btn btn-xs btn-error"
-              >
-                Delete
+              <button className="btn btn-primary" onClick={handleAddSubCategory}>
+                Add
               </button>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-    {categories.length === 0 && (
-      <div className="p-6 text-center text-gray-500">
-        No categories found!
+            </div>
+          </div>
+        </div>
+      )}
       </div>
-    )}
-  </div>
-</div>
-
     </div>
   );
 }
+
+
+
+
+
+     
+
+
+
+

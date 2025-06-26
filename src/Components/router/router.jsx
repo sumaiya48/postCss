@@ -29,6 +29,9 @@ import AddProduct from "../AdminPanel/Pages/Products/AddProduct";
 import ProductReview from "../AdminPanel/Pages/Products/ProductReview";
 import CreateJob from "../AdminPanel/Pages/Jobs/CreateJob";
 import EditJob from "../AdminPanel/Pages/Jobs/EditJob";
+import AddBlog from "../AdminPanel/Pages/Blog/AddBlog";
+import EditBlog from "../AdminPanel/Pages/Blog/EditBlog";
+import ViewProductDetails from "../AdminPanel/Pages/Products/ViewProductDetails";
 //import Login from "../AdminPanel/Pages/Login/Login";
 
 // Admin Panel Pages
@@ -71,6 +74,8 @@ const router = createBrowserRouter([
           { path: "products/categories", element: <Categories></Categories> },
           { path: "products/add", element: <AddProduct></AddProduct> },
           { path: "products/review", element: <ProductReview></ProductReview> },
+          { path: "products/product-details/:productId", element: <ViewProductDetails /> },
+
 
           { path: "coupons", element: <Coupons></Coupons> },
           { path: "media", element: <Media></Media> },
@@ -85,6 +90,8 @@ const router = createBrowserRouter([
           { path: "faq", element: <FAQ></FAQ> },
           { path: "/create-job", element: <CreateJob></CreateJob> },
           { path: "/edit-job/:jobId", element: <EditJob></EditJob> },
+          { path: "/add-blog", element:<AddBlog></AddBlog>  },
+          { path: "/edit-blog/:blogId", element: <EditBlog></EditBlog>},
         ],
       },
     ],

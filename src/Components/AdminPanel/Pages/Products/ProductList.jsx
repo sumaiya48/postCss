@@ -9,7 +9,7 @@ import {
 } from "react-icons/fa";
 import axios from "axios";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 
 export default function ProductList() {
@@ -19,6 +19,8 @@ export default function ProductList() {
   const [sortType, setSortType] = useState("default");
   const [filterTab, setFilterTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+
+  const navigate = useNavigate();
   const token = localStorage.getItem("authToken");
 
   useEffect(() => {
@@ -40,9 +42,7 @@ export default function ProductList() {
 
   const fetchCategories = async () => {
     try {
-      const res = await axios.get(
-        "https://test.api.dpmsign.com/api/product-category"
-      );
+      const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
       setCategories(res.data.data.categories || []);
     } catch (err) {
       console.error(err);
@@ -92,32 +92,40 @@ export default function ProductList() {
     setFilteredProducts(sorted);
   };
 
- const toggleStatus = async (productId, currentStatus) => {
-  console.log("Sending productId:", productId);
+  const handleStatusUpdate = async (productId, makeActive) => {
+  const id = Number(productId); // এখানে Number এ কনভার্ট করা হয়েছে
+  if (isNaN(id)) {
+    Swal.fire("Error!", "Product ID must be a valid number.", "error");
+    return;
+  }
 
-  const url = `https://test.api.dpmsign.com/api/product/${
-    currentStatus ? "inactive" : "active"
-  }?productId=${Number(productId)}`;
+  const url = `https://test.api.dpmsign.com/api/product/${makeActive ? "active" : "inactive"}`;
 
   try {
-    await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    await axios.post(
+      url,
+      { productId: id },  // productId number টাইপে পাঠানো হচ্ছে
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
     Swal.fire(
       "Success!",
-      `Product has been ${
-        currentStatus ? "deactivated" : "activated"
-      } successfully.`,
+      `Product marked as ${makeActive ? "Active" : "Inactive"}.`,
       "success"
     );
 
-    fetchProducts(); // Refresh products after status update
-  } catch (err) {
-    console.error("Failed to update status:", err?.response?.data || err);
-    Swal.fire("Error!", "Failed to update product status!", "error");
+    fetchProducts();
+  } catch (error) {
+    Swal.fire(
+      "Error!",
+      error.response?.data?.message || "Failed to update status.",
+      "error"
+    );
   }
 };
 
@@ -135,9 +143,7 @@ export default function ProductList() {
 
       if (result.isConfirmed) {
         await axios.delete(`https://test.api.dpmsign.com/api/product/${productId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
 
         Swal.fire("Deleted!", "Product has been deleted.", "success");
@@ -189,7 +195,6 @@ export default function ProductList() {
         </div>
       </div>
 
-      {/* Top Actions */}
       <div className="flex flex-wrap justify-between items-center pt-6 mb-4 gap-2">
         <div className="space-x-2">
           <button className="btn btn-success btn-sm">
@@ -216,7 +221,6 @@ export default function ProductList() {
         </div>
       </div>
 
-      {/* Tabs + Filters */}
       <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
         <div className="tabs tabs-bordered">
           <a
@@ -240,7 +244,6 @@ export default function ProductList() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto rounded-lg border">
         <table className="table table-sm">
           <thead className="bg-base-200">
@@ -262,14 +265,14 @@ export default function ProductList() {
               <tr key={item.productId}>
                 <td>
                   <img
-  src={
-    item.images?.[0]?.imageName
-      ? `https://test.api.dpmsign.com/static/product-images/${item.images[0].imageName}`
-      : "/no-image.png"
-  }
-  alt="product"
-  className="w-12 h-12 object-cover rounded"
-/>
+                    src={
+                      item.images?.[0]?.imageName
+                        ? `https://test.api.dpmsign.com/static/product-images/${item.images[0].imageName}`
+                        : "/no-image.png"
+                    }
+                    alt="product"
+                    className="w-12 h-12 object-cover rounded"
+                  />
                 </td>
                 <td>{item.name}</td>
                 <td>{item.sku}</td>
@@ -279,13 +282,12 @@ export default function ProductList() {
                 <td>{getCategoryName(item.categoryId)}</td>
                 <td>
                   <button
-                    onClick={() => toggleStatus(item.productId, item.isActive)}
-                    className={`btn btn-xs ${
-                      item.isActive ? "btn-success" : "btn-error"
-                    } text-white`}
-                  >
-                    {item.isActive ? "Active" : "Inactive"}
-                  </button>
+  onClick={() => handleStatusUpdate(item.productId, !item.isActive)} // কিন্তু ফাংশনের ভিতরেই Number করা আছে, তাই ঠিক আছে
+  className="text-yellow-600"
+>
+  🔁 Toggle Status
+</button>
+
                 </td>
                 <td>{new Date(item.createdAt).toLocaleDateString("en-GB")}</td>
                 <td>
@@ -298,7 +300,12 @@ export default function ProductList() {
                       className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-28 text-sm"
                     >
                       <li>
-                        <button className="flex items-center gap-2">
+                        <button
+                          className="flex items-center gap-2"
+                          onClick={() =>
+                            navigate(`/products/product-details/${item.productId}`)
+                          }
+                        >
                           <FaSearch /> View
                         </button>
                       </li>

@@ -7,6 +7,8 @@ export default function Customers() {
   const [loading, setLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterTab, setFilterTab] = useState("all");
   const itemsPerPage = 10;
 
   const token = localStorage.getItem("authToken");
@@ -14,9 +16,7 @@ export default function Customers() {
   const fetchCustomers = async () => {
     try {
       const res = await axios.get("https://test.api.dpmsign.com/api/customer", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       setCustomers(res.data.data.customers || []);
     } catch (err) {
@@ -31,19 +31,45 @@ export default function Customers() {
     fetchCustomers();
   }, []);
 
-  // pagination logic
+  const filteredCustomers = customers.filter((c) => {
+    const match =
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.phone.includes(searchTerm);
+
+    if (filterTab === "verified") return c.verified && match;
+    if (filterTab === "nonverified") return !c.verified && match;
+    return match;
+  });
+
   const indexOfLast = currentPage * itemsPerPage;
   const indexOfFirst = indexOfLast - itemsPerPage;
-  const currentCustomers = customers.slice(indexOfFirst, indexOfLast);
-  const totalPages = Math.ceil(customers.length / itemsPerPage);
+  const currentCustomers = filteredCustomers.slice(indexOfFirst, indexOfLast);
+  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
 
   return (
     <div className="p-6 bg-base-200 min-h-screen">
-      <h2 className="text-2xl font-bold mb-4">All Customers</h2>
+      <h2 className="text-2xl font-bold mb-4">Customer List</h2>
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4">
+        <button className={`btn btn-sm ${filterTab === "all" ? "btn-primary" : "btn-outline"}`} onClick={() => setFilterTab("all")}>All</button>
+        <button className={`btn btn-sm ${filterTab === "verified" ? "btn-success" : "btn-outline"}`} onClick={() => setFilterTab("verified")}>Verified</button>
+        <button className={`btn btn-sm ${filterTab === "nonverified" ? "btn-error" : "btn-outline"}`} onClick={() => setFilterTab("nonverified")}>Non-Verified</button>
+      </div>
+
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="Search by name, email, or phone"
+        className="input input-bordered w-full max-w-md mb-4"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+      />
 
       {loading ? (
         <p>Loading...</p>
-      ) : customers.length === 0 ? (
+      ) : filteredCustomers.length === 0 ? (
         <p>No customers found.</p>
       ) : (
         <div className="overflow-x-auto bg-white shadow rounded-lg">
@@ -66,7 +92,7 @@ export default function Customers() {
                   <td>{c.email}</td>
                   <td>{c.phone}</td>
                   <td>
-                    {c.isVerified ? (
+                    {c.verified ? (
                       <span className="badge badge-success">Yes</span>
                     ) : (
                       <span className="badge badge-error">No</span>
@@ -91,9 +117,7 @@ export default function Customers() {
               <button
                 key={i + 1}
                 onClick={() => setCurrentPage(i + 1)}
-                className={`btn btn-xs ${
-                  currentPage === i + 1 ? "btn-primary" : "btn-outline"
-                }`}
+                className={`btn btn-xs ${currentPage === i + 1 ? "btn-primary" : "btn-outline"}`}
               >
                 {i + 1}
               </button>
@@ -102,29 +126,31 @@ export default function Customers() {
         </div>
       )}
 
-      {/* Modal for details */}
+      {/* Modal */}
       {selectedCustomer && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
-      <h3 className="text-xl font-bold mb-4">Customer Details</h3>
-      <p><strong>Name:</strong> {selectedCustomer.name}</p>
-      <p><strong>Email:</strong> {selectedCustomer.email}</p>
-      <p><strong>Phone:</strong> {selectedCustomer.phone}</p>
-      <p><strong>Verified:</strong> {selectedCustomer.isVerified ? "Yes" : "No"}</p>
-      <p><strong>Created At:</strong> {new Date(selectedCustomer.createdAt).toLocaleString()}</p>
-      <p><strong>Updated At:</strong> {new Date(selectedCustomer.updatedAt).toLocaleString()}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold mb-4">Customer Details</h3>
+            <p><strong>Name:</strong> {selectedCustomer.name}</p>
+            <p><strong>Email:</strong> {selectedCustomer.email}</p>
+            <p><strong>Phone:</strong> {selectedCustomer.phone}</p>
+            <p><strong>Verified:</strong> {selectedCustomer.verified ? "Yes" : "No"}</p>
+            <p><strong>Billing Address:</strong> {selectedCustomer.billingAddress || "N/A"}</p>
+            <p><strong>Shipping Address:</strong> {selectedCustomer.shippingAddress || "N/A"}</p>
+            <p><strong>Created At:</strong> {new Date(selectedCustomer.createdAt).toLocaleString()}</p>
+            <p><strong>Updated At:</strong> {new Date(selectedCustomer.updatedAt).toLocaleString()}</p>
 
-      <div className="mt-4 text-right">
-        <button
-          className="btn btn-sm btn-error"
-          onClick={() => setSelectedCustomer(null)}
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+            <div className="mt-4 text-right">
+              <button
+                className="btn btn-sm btn-error"
+                onClick={() => setSelectedCustomer(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
