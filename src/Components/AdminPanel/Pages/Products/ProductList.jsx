@@ -92,23 +92,23 @@ export default function ProductList() {
     setFilteredProducts(sorted);
   };
 
-  const handleStatusUpdate = async (productId, makeActive) => {
-  const id = Number(productId); // এখানে Number এ কনভার্ট করা হয়েছে
+const handleStatusUpdate = async (productId, makeActive) => {
+  const id = Number(productId);
   if (isNaN(id)) {
     Swal.fire("Error!", "Product ID must be a valid number.", "error");
     return;
   }
 
-  const url = `https://test.api.dpmsign.com/api/product/${makeActive ? "active" : "inactive"}`;
+  const url = `https://test.api.dpmsign.com/api/product/status`;
 
   try {
-    await axios.post(
+    await axios.put(
       url,
-      { productId: id },  // productId number টাইপে পাঠানো হচ্ছে
+      { productId: id, isActive: makeActive },
       {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       }
     );
@@ -128,6 +128,7 @@ export default function ProductList() {
     );
   }
 };
+
 
   const handleDeleteProduct = async (productId) => {
     try {
@@ -281,14 +282,33 @@ export default function ProductList() {
                 <td>{item.pricingType}</td>
                 <td>{getCategoryName(item.categoryId)}</td>
                 <td>
-                  <button
-  onClick={() => handleStatusUpdate(item.productId, !item.isActive)} // কিন্তু ফাংশনের ভিতরেই Number করা আছে, তাই ঠিক আছে
-  className="text-yellow-600"
->
-  🔁 Toggle Status
-</button>
+  <div className="dropdown dropdown-bottom dropdown-hover">
+    <label tabIndex={0} className={`btn btn-xs ${item.isActive ? "btn-success" : "btn-error"}`}>
+      {item.isActive ? "Active" : "Inactive"}
+    </label>
+    <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-28 text-sm">
+      <li>
+        <button
+          className="text-green-600"
+          onClick={() => handleStatusUpdate(item.productId, true)}
+          disabled={item.isActive}
+        >
+          ✅ Active
+        </button>
+      </li>
+      <li>
+        <button
+          className="text-red-600"
+          onClick={() => handleStatusUpdate(item.productId, false)}
+          disabled={!item.isActive}
+        >
+          ❌ Inactive
+        </button>
+      </li>
+    </ul>
+  </div>
+</td>
 
-                </td>
                 <td>{new Date(item.createdAt).toLocaleDateString("en-GB")}</td>
                 <td>
                   <div className="dropdown dropdown-end">
@@ -310,7 +330,11 @@ export default function ProductList() {
                         </button>
                       </li>
                       <li>
-                        <button className="flex items-center gap-2">
+                        <button className="flex items-center gap-2"
+                        onClick={() =>
+                            navigate(`/products/product-update/${item.productId}`)
+                        }
+                        >
                           <FaEdit /> Edit
                         </button>
                       </li>

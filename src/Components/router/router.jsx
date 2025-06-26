@@ -32,6 +32,7 @@ import EditJob from "../AdminPanel/Pages/Jobs/EditJob";
 import AddBlog from "../AdminPanel/Pages/Blog/AddBlog";
 import EditBlog from "../AdminPanel/Pages/Blog/EditBlog";
 import ViewProductDetails from "../AdminPanel/Pages/Products/ViewProductDetails";
+import UpdateProduct from "../AdminPanel/Pages/Products/UpdateProduct";
 //import Login from "../AdminPanel/Pages/Login/Login";
 
 // Admin Panel Pages
@@ -75,6 +76,7 @@ const router = createBrowserRouter([
           { path: "products/add", element: <AddProduct></AddProduct> },
           { path: "products/review", element: <ProductReview></ProductReview> },
           { path: "products/product-details/:productId", element: <ViewProductDetails /> },
+          { path: "products/product-update/:productId", element: <UpdateProduct></UpdateProduct> },
 
 
           { path: "coupons", element: <Coupons></Coupons> },

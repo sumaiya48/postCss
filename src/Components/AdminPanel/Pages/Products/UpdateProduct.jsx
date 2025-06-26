@@ -1,207 +1,234 @@
-// AddProduct.jsx
-
-import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
-import { useNavigate } from "react-router-dom";
 
-export default function AddProduct() {
+export default function UpdateProduct() {
+  const { productId } = useParams();
   const navigate = useNavigate();
+  const token = localStorage.getItem("authToken");
 
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  // State holders for all editable fields:
   const [basic, setBasic] = useState({
     name: "",
     description: "",
     basePrice: "",
-    minOrderQuantity: 1,
+    minOrderQuantity: "",
     pricingType: "flat",
     isActive: true,
-    categoryId: "",
-    sku: "",
+    categoryId: null,
   });
-
-  const [categories, setCategories] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
   const [tags, setTags] = useState([]);
   const [attributes, setAttributes] = useState([]);
   const [variations, setVariations] = useState([]);
   const [variants, setVariants] = useState([]);
+  const [existingImages, setExistingImages] = useState([]);
   const [newImages, setNewImages] = useState([]);
-  const token = localStorage.getItem("authToken");
-
-const uploadNewImages = (e) => {
-  const files = Array.from(e.target.files);
-  setNewImages(files);
-};
-
-const removeNewImage = (index) => {
-  setNewImages((prev) => prev.filter((_, i) => i !== index));
-};
 
   useEffect(() => {
-    axios
-      .get("https://test.api.dpmsign.com/api/product-category")
-      .then((res) => setCategories(res.data.data.categories))
-      .catch((err) => console.error(err));
-  }, []);
+    (async () => {
+      await fetchCategories();
+      if (productId) await fetchProductDetails(productId);
+      setLoading(false);
+    })();
+  }, [productId]);
 
-  const handleBasicChange = (e) => {
+  async function fetchCategories() {
+    try {
+      const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
+      setCategories(res.data.data.categories || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function fetchProductDetails(id) {
+    try {
+      const res = await axios.get(`https://test.api.dpmsign.com/api/product/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const p = res.data.data.product;
+      setBasic({
+        name: p.name,
+        description: p.description,
+        basePrice: p.basePrice,
+        minOrderQuantity: p.minOrderQuantity,
+        pricingType: p.pricingType,
+        isActive: p.isActive,
+        categoryId: p.categoryId || "",
+      });
+      setTags(p.tags?.map(t => t.tag) || []);
+      setAttributes(p.attributes?.map(a => ({
+        property: a.property, description: a.description, attributeId: a.attributeId
+      })) || []);
+      setVariations(p.variations?.map(v => ({
+        name: v.name,
+        unit: v.unit,
+        variationItems: v.variationItems.map(vi => ({
+          value: vi.value,
+          variationItemId: vi.variationItemId
+        })),
+        variationId: v.variationId
+      })) || []);
+      setVariants(p.variants?.map(v => ({
+        additionalPrice: v.additionalPrice,
+        variantDetails: v.variantDetails.map(d => ({
+          variationName: d.variationItem?.variation?.name,
+          variationItemValue: d.variationItem?.value,
+          productVariantDetailId: d.productVariantDetailId
+        })),
+        productVariantId: v.productVariantId
+      })) || []);
+      setExistingImages(p.images || []);
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error!", "Failed to fetch product details", "error");
+    }
+  }
+
+  function handleBasicChange(e) {
     const { name, value, type, checked } = e.target;
-    setBasic((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
+    setBasic(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+  }
+
+  // Tag handlers
+  const addTag = () => setTags(prev => [...prev, ""]);
+  const updateTag = (i, value) => setTags(prev => prev.map((t, idx) => idx === i ? value : t));
+  const removeTag = (i) => setTags(prev => prev.filter((_, idx) => idx !== i));
+
+  // Attribute handlers
+  const addAttr = () => setAttributes(prev => [...prev, { property: "", description: "" }]);
+  const updateAttr = (i, field, value) => {
+    setAttributes(prev => prev.map((a, idx) =>
+      idx === i ? { ...a, [field]: value } : a
+    ));
   };
+  const removeAttr = (i) => setAttributes(prev => prev.filter((_, idx) => idx !== i));
 
-  const addTag = () => setTags((prev) => [...prev, ""]);
-  const updateTag = (i, val) =>
-    setTags((prev) => prev.map((t, idx) => (idx === i ? val : t)));
-  const removeTag = (i) =>
-    setTags((prev) => prev.filter((_, idx) => idx !== i));
-
-  const addAttr = () => setAttributes((prev) => [...prev, { property: "", description: "" }]);
-  const updateAttr = (i, field, val) =>
-    setAttributes((prev) =>
-      prev.map((a, idx) => (idx === i ? { ...a, [field]: val } : a))
-    );
-  const removeAttr = (i) =>
-    setAttributes((prev) => prev.filter((_, idx) => idx !== i));
-
-  const addVar = () => setVariations((prev) => [...prev, { name: "", unit: "", variationItems: [] }]);
-  const updateVar = (i, field, val) =>
-    setVariations((prev) =>
-      prev.map((v, idx) => (idx === i ? { ...v, [field]: val } : v))
-    );
-  const addVarItem = (i) =>
-    setVariations((prev) =>
+  // Variation handlers
+  const addVar = () => setVariations(prev => [...prev, { name: "", unit: "", variationItems: [] }]);
+  const updateVar = (i, field, value) => setVariations(prev => prev.map((v, idx) =>
+    idx === i ? { ...v, [field]: value } : v
+  ));
+  const addVarItem = (i) => {
+    setVariations(prev =>
       prev.map((v, idx) =>
         idx === i ? { ...v, variationItems: [...v.variationItems, { value: "" }] } : v
       )
     );
-  const updateVarItem = (i, j, val) =>
-    setVariations((prev) =>
-      prev.map((v, idx) =>
-        idx === i
-          ? {
-              ...v,
-              variationItems: v.variationItems.map((vi, viIdx) =>
-                viIdx === j ? { ...vi, value: val } : vi
-              ),
-            }
-          : v
-      )
-    );
-  const removeVarItem = (i, j) =>
-    setVariations((prev) =>
-      prev.map((v, idx) =>
-        idx === i
-          ? {
-              ...v,
-              variationItems: v.variationItems.filter((_, viIdx) => viIdx !== j),
-            }
-          : v
-      )
-    );
-  const removeVar = (i) => setVariations((prev) => prev.filter((_, idx) => idx !== i));
+  };
+  const updateVarItem = (i, j, value) => {
+    setVariations(prev => prev.map((v, idx) =>
+      idx === i ? {
+        ...v,
+        variationItems: v.variationItems.map((vi, viIdx) =>
+          viIdx === j ? { ...vi, value } : vi
+        ),
+      } : v
+    ));
+  };
+  const removeVarItem = (i, j) => {
+    setVariations(prev => prev.map((v, idx) =>
+      idx === i
+        ? { ...v, variationItems: v.variationItems.filter((_, viIdx) => viIdx !== j) }
+        : v
+    ));
+  };
+  const removeVar = (i) => setVariations(prev => prev.filter((_, idx) => idx !== i));
 
-  const addVt = () =>
-    setVariants((prev) => [...prev, { additionalPrice: "", variantDetails: [] }]);
-  const updateVt = (i, field, val) =>
-    setVariants((prev) =>
-      prev.map((v, idx) => (idx === i ? { ...v, [field]: val } : v))
-    );
+  // Variant handlers
+  const addVt = () => setVariants(prev => [...prev, { additionalPrice: "", variantDetails: [] }]);
+  const updateVt = (i, field, value) =>
+    setVariants(prev => prev.map((v, idx) =>
+      idx === i ? { ...v, [field]: value } : v
+    ));
   const addVtDetail = (i) =>
-    setVariants((prev) =>
-      prev.map((v, idx) =>
-        idx === i
-          ? {
-              ...v,
-              variantDetails: [
-                ...v.variantDetails,
-                { variationName: "", variationItemValue: "" },
-              ],
-            }
-          : v
-      )
-    );
-  const updateVtDetail = (i, j, field, val) =>
-    setVariants((prev) =>
-      prev.map((v, idx) =>
-        idx === i
-          ? {
-              ...v,
-              variantDetails: v.variantDetails.map((d, di) =>
-                di === j ? { ...d, [field]: val } : d
-              ),
-            }
-          : v
-      )
-    );
+    setVariants(prev => prev.map((v, idx) =>
+      idx === i ? {
+        ...v,
+        variantDetails: [...v.variantDetails, { variationName: "", variationItemValue: "" }],
+      } : v
+    ));
+  const updateVtDetail = (i, j, field, value) =>
+    setVariants(prev => prev.map((v, idx) =>
+      idx === i ? {
+        ...v,
+        variantDetails: v.variantDetails.map((d, di) =>
+          di === j ? { ...d, [field]: value } : d
+        ),
+      } : v
+    ));
   const removeVtDetail = (i, j) =>
-    setVariants((prev) =>
-      prev.map((v, idx) =>
-        idx === i
-          ? {
-              ...v,
-              variantDetails: v.variantDetails.filter((_, di) => di !== j),
-            }
-          : v
-      )
-    );
-  const removeVt = (i) => setVariants((prev) => prev.filter((_, idx) => idx !== i));
+    setVariants(prev => prev.map((v, idx) =>
+      idx === i
+        ? { ...v, variantDetails: v.variantDetails.filter((_, di) => di !== j) }
+        : v
+    ));
+  const removeVt = (i) => setVariants(prev => prev.filter((_, idx) => idx !== i));
 
-  const handleImageChange = (e) => setNewImages(Array.from(e.target.files));
+  // Images
+  const uploadNewImages = (e) => {
+    const files = Array.from(e.target.files);
+    setNewImages(prev => [...prev, ...files]);
+  };
+  const removeNewImage = (i) => setNewImages(prev => prev.filter((_, idx) => idx !== i));
+  const removeExistingImage = (imgId) => {
+    setExistingImages(prev => prev.filter(i => i.imageId !== imgId));
+  };
 
-  const handleSubmit = async (e) => {
+  async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
-
     try {
+      // Step 1: PUT updated product
+      const payload = {
+        productId: Number(productId),
+        ...basic,
+        basePrice: Number(basic.basePrice),
+        minOrderQuantity: Number(basic.minOrderQuantity),
+        categoryId: basic.categoryId || null,
+        attributes: attributes.map(({ attributeId, ...a }) => a),
+        tags,
+        variations: variations.map(({ variationItems, variationId, ...v }) => ({
+          ...v,
+          variationItems: variationItems.map(({ variationItemId, ...vi }) => vi),
+        })),
+        variants: variants.map(({ productVariantId, variantDetails, ...v }) => ({
+          ...v,
+          variantDetails: variantDetails.map(({ productVariantDetailId, ...d }) => d),
+        })),
+      };
+      await axios.put("https://test.api.dpmsign.com/api/product", payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-      const { sku, ...basicWithoutSku } = basic;
-      const productRes = await axios.post(
-        "https://test.api.dpmsign.com/api/product/create",
-        {
-         ...basicWithoutSku,
-    basePrice: Number(basic.basePrice),
-    minOrderQuantity: Number(basic.minOrderQuantity),
-    tags,
-    attributes,
-    variations,
-    variants,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      const productId = productRes.data.data.product.productId;
-
-      if (newImages.length > 0) {
+      // Step 2: Upload new images if present
+      if (newImages.length) {
         const form = new FormData();
         form.append("productId", productId);
-        newImages.forEach((img) => form.append("product-images", img));
-
-        await axios.post(
-          "https://test.api.dpmsign.com/api/product/upload-image",
-          form,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "multipart/form-data",
-            },
+        newImages.forEach(f => form.append("product-images", f));
+        await axios.put("https://test.api.dpmsign.com/api/product/edit-image", form, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data"
           }
-        );
+        });
       }
 
-      Swal.fire("Success!", "Product created successfully", "success");
+      Swal.fire("Success!", "Product updated successfully!", "success");
       navigate("/products/all");
     } catch (err) {
       console.error(err);
-      Swal.fire("Error", err?.response?.data?.message || "Failed to create product", "error");
-    } finally {
-      setSubmitting(false);
+      Swal.fire("Error!", err.response?.data?.message || "Update failed", "error");
     }
-  };
+    setSubmitting(false);
+  }
+
+  if (loading) return <div className="p-8 text-lg text-center">Loading product details...</div>;
 
   return (
     <div className="max-w-5xl mx-auto p-8 bg-white shadow-md rounded-md">
@@ -211,9 +238,9 @@ const removeNewImage = (index) => {
       >
         ← Back
       </button>
-      <h1 className="text-4xl font-extrabold mb-8 text-gray-800">Add Product</h1>
+      <h1 className="text-4xl font-extrabold mb-8 text-gray-800">Update Product</h1>
 
-     <form onSubmit={handleSubmit} className="space-y-10">
+      <form onSubmit={handleSubmit} className="space-y-10">
 
         {/* Basic Info Section */}
         <section className="space-y-6">
@@ -335,7 +362,29 @@ const removeNewImage = (index) => {
         <section className="space-y-4">
           <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Images</h2>
 
-          
+          <div>
+            <p className="mb-2 font-medium text-gray-700">Existing Images ({existingImages.length})</p>
+            <div className="flex flex-wrap gap-4">
+              {existingImages.map(img => (
+                <div key={img.imageId} className="relative w-24 h-24 rounded overflow-hidden border border-gray-300">
+                  <img
+                    src={`https://test.api.dpmsign.com/static/product-images/${img.imageName}`}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeExistingImage(img.imageId)}
+                    className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 text-lg font-bold transition"
+                    title="Remove Image"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="block mb-2 font-medium text-gray-700">Add New Images ({newImages.length})</label>
             <input
@@ -570,15 +619,14 @@ const removeNewImage = (index) => {
 
         {/* Submit Button */}
         <button
-  type="submit"
-  disabled={submitting}
-  className={`btn btn-primary w-full py-3 text-lg font-semibold transition ${
-    submitting ? "opacity-70 cursor-not-allowed" : "hover:bg-primary-focus"
-  }`}
->
-  {submitting ? "Creating..." : "Create Product"}
-</button>
-
+          type="submit"
+          disabled={submitting}
+          className={`btn btn-primary w-full py-3 text-lg font-semibold transition ${
+            submitting ? "opacity-70 cursor-not-allowed" : "hover:bg-primary-focus"
+          }`}
+        >
+          {submitting ? "Updating..." : "Update Product"}
+        </button>
       </form>
     </div>
   );
