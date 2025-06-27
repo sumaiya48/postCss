@@ -11,6 +11,9 @@ export default function UpdateProduct() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [allFetchedCategories, setAllFetchedCategories] = useState([]);
+const [subCategories, setSubCategories] = useState([]);
+
 
   // State holders for all editable fields:
   const [basic, setBasic] = useState({
@@ -37,14 +40,19 @@ export default function UpdateProduct() {
     })();
   }, [productId]);
 
-  async function fetchCategories() {
-    try {
-      const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
-      setCategories(res.data.data.categories || []);
-    } catch (err) {
-      console.error(err);
-    }
+ async function fetchCategories() {
+  try {
+    const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
+    const all = res.data.data.categories || [];
+    setAllFetchedCategories(all);
+
+    const topLevel = all.filter(cat => cat.parentCategoryId === null);
+    setCategories(topLevel);
+  } catch (err) {
+    console.error(err);
   }
+}
+
 
   async function fetchProductDetails(id) {
     try {
@@ -61,6 +69,11 @@ export default function UpdateProduct() {
         isActive: p.isActive,
         categoryId: p.categoryId || "",
       });
+      const parentCategory = allFetchedCategories.find(
+  (cat) => cat.categoryId === p.categoryId || cat.subCategories?.some(sub => sub.categoryId === p.categoryId)
+);
+setSubCategories(parentCategory?.subCategories || []);
+
       setTags(p.tags?.map(t => t.tag) || []);
       setAttributes(p.attributes?.map(a => ({
         property: a.property, description: a.description, attributeId: a.attributeId
@@ -90,10 +103,32 @@ export default function UpdateProduct() {
     }
   }
 
-  function handleBasicChange(e) {
-    const { name, value, type, checked } = e.target;
-    setBasic(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+ function handleBasicChange(e) {
+  const { name, value, type, checked } = e.target;
+
+  if (name === "categoryId") {
+    const selectedCategoryId = Number(value);
+    const selectedCategory = allFetchedCategories.find(
+      (cat) => cat.categoryId === selectedCategoryId
+    );
+
+    setBasic(prev => ({
+      ...prev,
+      categoryId: selectedCategoryId,
+      subCategoryId: null
+    }));
+
+    setSubCategories(selectedCategory?.subCategories || []);
+  } else if (name === "subCategoryId") {
+    setBasic(prev => ({ ...prev, subCategoryId: Number(value) }));
+  } else {
+    setBasic(prev => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value
+    }));
   }
+}
+
 
   // Tag handlers
   const addTag = () => setTags(prev => [...prev, ""]);
@@ -184,24 +219,40 @@ export default function UpdateProduct() {
     e.preventDefault();
     setSubmitting(true);
     try {
+      const finalCategoryId = basic.subCategoryId || basic.categoryId;
+
       // Step 1: PUT updated product
-      const payload = {
-        productId: Number(productId),
-        ...basic,
-        basePrice: Number(basic.basePrice),
-        minOrderQuantity: Number(basic.minOrderQuantity),
-        categoryId: basic.categoryId || null,
-        attributes: attributes.map(({ attributeId, ...a }) => a),
-        tags,
-        variations: variations.map(({ variationItems, variationId, ...v }) => ({
-          ...v,
-          variationItems: variationItems.map(({ variationItemId, ...vi }) => vi),
-        })),
-        variants: variants.map(({ productVariantId, variantDetails, ...v }) => ({
-          ...v,
-          variantDetails: variantDetails.map(({ productVariantDetailId, ...d }) => d),
-        })),
-      };
+      const {
+  name,
+  description,
+  basePrice,
+  minOrderQuantity,
+  pricingType,
+  isActive,
+  sku, // Optional
+} = basic;
+
+const payload = {
+  productId: Number(productId),
+  name,
+  description,
+  basePrice: Number(basePrice),
+  minOrderQuantity: Number(minOrderQuantity),
+  pricingType,
+  isActive,
+  categoryId: finalCategoryId || null,
+  attributes: attributes.map(({ attributeId, ...a }) => a),
+  tags,
+  variations: variations.map(({ variationItems, variationId, ...v }) => ({
+    ...v,
+    variationItems: variationItems.map(({ variationItemId, ...vi }) => vi),
+  })),
+  variants: variants.map(({ productVariantId, variantDetails, ...v }) => ({
+    ...v,
+    variantDetails: variantDetails.map(({ productVariantDetailId, ...d }) => d),
+  })),
+};
+
       await axios.put("https://test.api.dpmsign.com/api/product", payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -342,19 +393,37 @@ export default function UpdateProduct() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block mb-1 font-medium text-gray-700">Category</label>
-              <select
-                name="categoryId"
-                value={basic.categoryId}
-                onChange={handleBasicChange}
-                className="select select-bordered w-full"
-              >
-                <option value="">None</option>
-                {categories.map(c => (
-                  <option key={c.categoryId} value={c.categoryId}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+  <label className="block mb-1 font-medium text-gray-700">Category</label>
+  <select
+    name="categoryId"
+    value={basic.categoryId}
+    onChange={handleBasicChange}
+    className="select select-bordered w-full"
+  >
+    <option value="">Select Parent Category</option>
+    {categories.map(c => (
+      <option key={c.categoryId} value={c.categoryId}>{c.name}</option>
+    ))}
+  </select>
+</div>
+
+{subCategories.length > 0 && (
+  <div className="md:col-span-2">
+    <label className="block mb-1 font-medium text-gray-700">Sub-Category</label>
+    <select
+      name="subCategoryId"
+      value={basic.subCategoryId || ""}
+      onChange={handleBasicChange}
+      className="select select-bordered w-full"
+    >
+      <option value="">Select Sub-Category</option>
+      {subCategories.map(sub => (
+        <option key={sub.categoryId} value={sub.categoryId}>{sub.name}</option>
+      ))}
+    </select>
+  </div>
+)}
+
           </div>
         </section>
 

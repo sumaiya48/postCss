@@ -15,11 +15,17 @@ export default function AddProduct() {
     minOrderQuantity: 1,
     pricingType: "flat",
     isActive: true,
-    categoryId: "",
+    categoryId: "", // This will hold the ID of the selected PARENT category
+    subCategoryId: null, // This will hold the ID of the selected SUB-category
     sku: "",
   });
 
-  const [categories, setCategories] = useState([]);
+  
+
+  const [allFetchedCategories, setAllFetchedCategories] = useState([]); // Stores the raw, flat list from API
+  const [categories, setCategories] = useState([]); // Stores only top-level (parent) categories for the first dropdown
+  const [subCategories, setSubCategories] = useState([]); // Stores sub-categories for the second dropdown, based on parent selection
+
   const [submitting, setSubmitting] = useState(false);
   const [tags, setTags] = useState([]);
   const [attributes, setAttributes] = useState([]);
@@ -28,28 +34,64 @@ export default function AddProduct() {
   const [newImages, setNewImages] = useState([]);
   const token = localStorage.getItem("authToken");
 
-const uploadNewImages = (e) => {
-  const files = Array.from(e.target.files);
-  setNewImages(files);
-};
+  const uploadNewImages = (e) => {
+    const files = Array.from(e.target.files);
+    setNewImages(files);
+  };
 
-const removeNewImage = (index) => {
-  setNewImages((prev) => prev.filter((_, i) => i !== index));
-};
+  const removeNewImage = (index) => {
+    setNewImages((prev) => prev.filter((_, i) => i !== index));
+  };
 
   useEffect(() => {
-    axios
-      .get("https://test.api.dpmsign.com/api/product-category")
-      .then((res) => setCategories(res.data.data.categories))
-      .catch((err) => console.error(err));
+    const fetchAllCategories = async () => {
+      try {
+        const res = await axios.get(
+          "https://test.api.dpmsign.com/api/product-category"
+        );
+        const allCategoriesData = res.data.data.categories;
+        setAllFetchedCategories(allCategoriesData); // Store the full list
+
+        // Filter out only the top-level categories for the main dropdown
+        const topLevelCats = allCategoriesData.filter(
+          (cat) => cat.parentCategoryId === null
+        );
+        setCategories(topLevelCats); // Set 'categories' state to only parent categories
+      } catch (err) {
+        console.error("Error fetching categories:", err);
+        Swal.fire("Error", "Could not load categories.", "error");
+      }
+    };
+    fetchAllCategories();
   }, []);
 
   const handleBasicChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setBasic((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
+
+    if (name === "categoryId") {
+      const selectedCategoryId = Number(value);
+      const selectedCategory = allFetchedCategories.find(
+        (cat) => cat.categoryId === selectedCategoryId
+      );
+
+      // Reset subCategory and populate new subCategories
+      setBasic((prev) => ({
+        ...prev,
+        categoryId: selectedCategoryId,
+        subCategoryId: null, // Always reset subCategory when parent changes
+      }));
+      setSubCategories(selectedCategory?.subCategories || []);
+    } else if (name === "subCategoryId") {
+      setBasic((prev) => ({
+        ...prev,
+        subCategoryId: Number(value),
+      }));
+    } else {
+      setBasic((prev) => ({
+        ...prev,
+        [name]: type === "checkbox" ? checked : value,
+      }));
+    }
   };
 
   const addTag = () => setTags((prev) => [...prev, ""]);
@@ -58,7 +100,8 @@ const removeNewImage = (index) => {
   const removeTag = (i) =>
     setTags((prev) => prev.filter((_, idx) => idx !== i));
 
-  const addAttr = () => setAttributes((prev) => [...prev, { property: "", description: "" }]);
+  const addAttr = () =>
+    setAttributes((prev) => [...prev, { property: "", description: "" }]);
   const updateAttr = (i, field, val) =>
     setAttributes((prev) =>
       prev.map((a, idx) => (idx === i ? { ...a, [field]: val } : a))
@@ -66,7 +109,11 @@ const removeNewImage = (index) => {
   const removeAttr = (i) =>
     setAttributes((prev) => prev.filter((_, idx) => idx !== i));
 
-  const addVar = () => setVariations((prev) => [...prev, { name: "", unit: "", variationItems: [] }]);
+  const addVar = () =>
+    setVariations((prev) => [
+      ...prev,
+      { name: "", unit: "", variationItems: [] },
+    ]);
   const updateVar = (i, field, val) =>
     setVariations((prev) =>
       prev.map((v, idx) => (idx === i ? { ...v, [field]: val } : v))
@@ -74,7 +121,9 @@ const removeNewImage = (index) => {
   const addVarItem = (i) =>
     setVariations((prev) =>
       prev.map((v, idx) =>
-        idx === i ? { ...v, variationItems: [...v.variationItems, { value: "" }] } : v
+        idx === i
+          ? { ...v, variationItems: [...v.variationItems, { value: "" }] }
+          : v
       )
     );
   const updateVarItem = (i, j, val) =>
@@ -96,15 +145,21 @@ const removeNewImage = (index) => {
         idx === i
           ? {
               ...v,
-              variationItems: v.variationItems.filter((_, viIdx) => viIdx !== j),
+              variationItems: v.variationItems.filter(
+                (_, viIdx) => viIdx !== j
+              ),
             }
           : v
       )
     );
-  const removeVar = (i) => setVariations((prev) => prev.filter((_, idx) => idx !== i));
+  const removeVar = (i) =>
+    setVariations((prev) => prev.filter((_, idx) => idx !== i));
 
   const addVt = () =>
-    setVariants((prev) => [...prev, { additionalPrice: "", variantDetails: [] }]);
+    setVariants((prev) => [
+      ...prev,
+      { additionalPrice: "", variantDetails: [] },
+    ]);
   const updateVt = (i, field, val) =>
     setVariants((prev) =>
       prev.map((v, idx) => (idx === i ? { ...v, [field]: val } : v))
@@ -147,32 +202,52 @@ const removeNewImage = (index) => {
           : v
       )
     );
-  const removeVt = (i) => setVariants((prev) => prev.filter((_, idx) => idx !== i));
+  const removeVt = (i) =>
+    setVariants((prev) => prev.filter((_, idx) => idx !== i));
 
-  const handleImageChange = (e) => setNewImages(Array.from(e.target.files));
+  // The handleImageChange function already calls setNewImages, so no change needed here.
+  // const handleImageChange = (e) => setNewImages(Array.from(e.target.files));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
+      const {
+  sku,
+  subCategoryId,
+  categoryId,
+  ...restBasic
+} = basic;
 
-      const { sku, ...basicWithoutSku } = basic;
+      // Determine the categoryId to send based on whether a sub-category is selected
+     const finalCategoryId = subCategoryId || categoryId;
+      if (!finalCategoryId) {
+        Swal.fire(
+          "Validation Error",
+          "Please select a category or sub-category.",
+          "warning"
+        );
+        setSubmitting(false);
+        return; // Stop the submission if no category is selected
+      }
+
       const productRes = await axios.post(
-        "https://test.api.dpmsign.com/api/product/create",
-        {
-         ...basicWithoutSku,
+  "https://test.api.dpmsign.com/api/product/create",
+  {
+    ...restBasic,
+    categoryId: finalCategoryId,
     basePrice: Number(basic.basePrice),
     minOrderQuantity: Number(basic.minOrderQuantity),
     tags,
     attributes,
     variations,
     variants,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+  },
+  {
+    headers: { Authorization: `Bearer ${token}` },
+  }
+);
 
       const productId = productRes.data.data.product.productId;
 
@@ -197,7 +272,11 @@ const removeNewImage = (index) => {
       navigate("/products/all");
     } catch (err) {
       console.error(err);
-      Swal.fire("Error", err?.response?.data?.message || "Failed to create product", "error");
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message || "Failed to create product",
+        "error"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -211,17 +290,21 @@ const removeNewImage = (index) => {
       >
         ← Back
       </button>
-      <h1 className="text-4xl font-extrabold mb-8 text-gray-800">Add Product</h1>
+      <h1 className="text-4xl font-extrabold mb-8 text-gray-800">
+        Add Product
+      </h1>
 
-     <form onSubmit={handleSubmit} className="space-y-10">
-
+      <form onSubmit={handleSubmit} className="space-y-10">
         {/* Basic Info Section */}
         <section className="space-y-6">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Basic Information</h2>
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Basic Information
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
             <div>
-              <label className="block mb-1 font-medium text-gray-700">Name <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Name <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 name="name"
@@ -235,7 +318,9 @@ const removeNewImage = (index) => {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium text-gray-700">SKU (read-only)</label>
+              <label className="block mb-1 font-medium text-gray-700">
+                SKU (read-only)
+              </label>
               <input
                 type="text"
                 value={basic.sku || "N/A"}
@@ -246,7 +331,9 @@ const removeNewImage = (index) => {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium text-gray-700">Base Price <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Base Price <span className="text-red-500">*</span>
+              </label>
               <input
                 name="basePrice"
                 type="number"
@@ -260,7 +347,9 @@ const removeNewImage = (index) => {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium text-gray-700">Minimum Order Qty <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Minimum Order Qty <span className="text-red-500">*</span>
+              </label>
               <input
                 name="minOrderQuantity"
                 type="number"
@@ -274,7 +363,9 @@ const removeNewImage = (index) => {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium text-gray-700">Pricing Type <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Pricing Type <span className="text-red-500">*</span>
+              </label>
               <select
                 name="pricingType"
                 value={basic.pricingType}
@@ -296,13 +387,18 @@ const removeNewImage = (index) => {
                 className="checkbox checkbox-primary"
                 id="isActive"
               />
-              <label htmlFor="isActive" className="font-medium text-gray-700 cursor-pointer">
+              <label
+                htmlFor="isActive"
+                className="font-medium text-gray-700 cursor-pointer"
+              >
                 Active
               </label>
             </div>
 
             <div className="md:col-span-2">
-              <label className="block mb-1 font-medium text-gray-700">Description <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Description <span className="text-red-500">*</span>
+              </label>
               <textarea
                 name="description"
                 value={basic.description}
@@ -315,29 +411,63 @@ const removeNewImage = (index) => {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block mb-1 font-medium text-gray-700">Category</label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Category
+              </label>
               <select
                 name="categoryId"
                 value={basic.categoryId}
                 onChange={handleBasicChange}
                 className="select select-bordered w-full"
               >
-                <option value="">None</option>
-                {categories.map(c => (
-                  <option key={c.categoryId} value={c.categoryId}>{c.name}</option>
-                ))}
+                <option value="">Select Parent Category</option>{" "}
+                {/* Changed to "Select Parent Category" */}
+                {categories.map(
+                  (
+                    c // Now 'categories' holds only parent categories
+                  ) => (
+                    <option key={c.categoryId} value={c.categoryId}>
+                      {c.name}
+                    </option>
+                  )
+                )}
               </select>
             </div>
+
+            {/* Sub-category dropdown, shown only if subCategories exist for the selected parent */}
+            {subCategories.length > 0 && (
+              <div className="md:col-span-2">
+                <label className="block mb-1 font-medium text-gray-700">
+                  Sub-Category
+                </label>
+                <select
+                  name="subCategoryId"
+                  value={basic.subCategoryId || ""}
+                  onChange={handleBasicChange}
+                  className="select select-bordered w-full"
+                >
+                  <option value="">Select Sub-Category</option>
+                  {subCategories.map((sub) => (
+                    <option key={sub.categoryId} value={sub.categoryId}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </section>
 
         {/* Images Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Images</h2>
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Images
+          </h2>
 
-          
           <div>
-            <label className="block mb-2 font-medium text-gray-700">Add New Images ({newImages.length})</label>
+            <label className="block mb-2 font-medium text-gray-700">
+              Add New Images ({newImages.length})
+            </label>
             <input
               type="file"
               multiple
@@ -347,7 +477,10 @@ const removeNewImage = (index) => {
             />
             <div className="flex flex-wrap gap-4 mt-3">
               {newImages.map((file, i) => (
-                <div key={i} className="relative w-24 h-24 rounded overflow-hidden border border-gray-300">
+                <div
+                  key={i}
+                  className="relative w-24 h-24 rounded overflow-hidden border border-gray-300"
+                >
                   <img
                     src={URL.createObjectURL(file)}
                     alt=""
@@ -369,14 +502,18 @@ const removeNewImage = (index) => {
 
         {/* Tags Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Tags</h2>
-          {tags.length === 0 && <p className="text-gray-500 mb-2">No tags added yet.</p>}
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Tags
+          </h2>
+          {tags.length === 0 && (
+            <p className="text-gray-500 mb-2">No tags added yet.</p>
+          )}
           {tags.map((t, i) => (
             <div key={i} className="flex items-center gap-3 mb-2">
               <input
                 type="text"
                 value={t}
-                onChange={e => updateTag(i, e.target.value)}
+                onChange={(e) => updateTag(i, e.target.value)}
                 className="input input-bordered flex-grow"
                 placeholder="Tag"
               />
@@ -401,20 +538,24 @@ const removeNewImage = (index) => {
 
         {/* Attributes Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Attributes</h2>
-          {attributes.length === 0 && <p className="text-gray-500 mb-2">No attributes added yet.</p>}
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Attributes
+          </h2>
+          {attributes.length === 0 && (
+            <p className="text-gray-500 mb-2">No attributes added yet.</p>
+          )}
           {attributes.map((a, i) => (
             <div key={i} className="flex gap-3 mb-2">
               <input
                 placeholder="Property"
                 value={a.property}
-                onChange={e => updateAttr(i, "property", e.target.value)}
+                onChange={(e) => updateAttr(i, "property", e.target.value)}
                 className="input input-bordered flex-1"
               />
               <input
                 placeholder="Description"
                 value={a.description}
-                onChange={e => updateAttr(i, "description", e.target.value)}
+                onChange={(e) => updateAttr(i, "description", e.target.value)}
                 className="input input-bordered flex-1"
               />
               <button
@@ -438,21 +579,28 @@ const removeNewImage = (index) => {
 
         {/* Variations Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Variations</h2>
-          {variations.length === 0 && <p className="text-gray-500 mb-2">No variations added yet.</p>}
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Variations
+          </h2>
+          {variations.length === 0 && (
+            <p className="text-gray-500 mb-2">No variations added yet.</p>
+          )}
           {variations.map((v, i) => (
-            <div key={i} className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50">
+            <div
+              key={i}
+              className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50"
+            >
               <div className="flex flex-wrap gap-3 items-end mb-3">
                 <input
                   placeholder="Name"
                   value={v.name}
-                  onChange={e => updateVar(i, "name", e.target.value)}
+                  onChange={(e) => updateVar(i, "name", e.target.value)}
                   className="input input-bordered flex-grow min-w-[150px]"
                 />
                 <input
                   placeholder="Unit"
                   value={v.unit}
-                  onChange={e => updateVar(i, "unit", e.target.value)}
+                  onChange={(e) => updateVar(i, "unit", e.target.value)}
                   className="input input-bordered w-36"
                 />
                 <button
@@ -470,7 +618,7 @@ const removeNewImage = (index) => {
                     <input
                       placeholder="Value"
                       value={vi.value}
-                      onChange={e => updateVarItem(i, j, e.target.value)}
+                      onChange={(e) => updateVarItem(i, j, e.target.value)}
                       className="input input-bordered flex-grow"
                     />
                     <button
@@ -503,16 +651,25 @@ const removeNewImage = (index) => {
 
         {/* Variants Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Variants</h2>
-          {variants.length === 0 && <p className="text-gray-500 mb-2">No variants added yet.</p>}
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Variants
+          </h2>
+          {variants.length === 0 && (
+            <p className="text-gray-500 mb-2">No variants added yet.</p>
+          )}
           {variants.map((vt, i) => (
-            <div key={i} className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50">
+            <div
+              key={i}
+              className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50"
+            >
               <div className="flex flex-wrap gap-3 items-end mb-3">
                 <input
                   type="number"
                   placeholder="Additional Price"
                   value={vt.additionalPrice}
-                  onChange={e => updateVt(i, "additionalPrice", e.target.value)}
+                  onChange={(e) =>
+                    updateVt(i, "additionalPrice", e.target.value)
+                  }
                   className="input input-bordered w-40"
                   min={0}
                 />
@@ -531,13 +688,22 @@ const removeNewImage = (index) => {
                     <input
                       placeholder="Variation Name"
                       value={d.variationName}
-                      onChange={e => updateVtDetail(i, j, "variationName", e.target.value)}
+                      onChange={(e) =>
+                        updateVtDetail(i, j, "variationName", e.target.value)
+                      }
                       className="input input-bordered flex-grow"
                     />
                     <input
                       placeholder="Item Value"
                       value={d.variationItemValue}
-                      onChange={e => updateVtDetail(i, j, "variationItemValue", e.target.value)}
+                      onChange={(e) =>
+                        updateVtDetail(
+                          i,
+                          j,
+                          "variationItemValue",
+                          e.target.value
+                        )
+                      }
                       className="input input-bordered flex-grow"
                     />
                     <button
@@ -570,15 +736,16 @@ const removeNewImage = (index) => {
 
         {/* Submit Button */}
         <button
-  type="submit"
-  disabled={submitting}
-  className={`btn btn-primary w-full py-3 text-lg font-semibold transition ${
-    submitting ? "opacity-70 cursor-not-allowed" : "hover:bg-primary-focus"
-  }`}
->
-  {submitting ? "Creating..." : "Create Product"}
-</button>
-
+          type="submit"
+          disabled={submitting}
+          className={`btn btn-primary w-full py-3 text-lg font-semibold transition ${
+            submitting
+              ? "opacity-70 cursor-not-allowed"
+              : "hover:bg-primary-focus"
+          }`}
+        >
+          {submitting ? "Creating..." : "Create Product"}
+        </button>
       </form>
     </div>
   );

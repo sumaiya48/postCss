@@ -100,8 +100,8 @@ export default function Categories() {
     if (confirm.isConfirmed) {
       try {
         await axios.delete(
-          `https://test.api.dpmsign.com/api/product-category/${categoryId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+         ` https://test.api.dpmsign.com/api/product-category/${categoryId}`,
+          { headers: { Authorization: `Bearer ${token} `} }
         );
         fetchCategories();
         Swal.fire("Deleted!", "Category deleted.", "success");
@@ -120,7 +120,7 @@ export default function Categories() {
           name: editCategory.name,
           parentCategoryId: editCategory.parentCategoryId,
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization:` Bearer ${token}` } }
       );
       setShowEditModal(false);
       fetchCategories();
@@ -138,7 +138,7 @@ export default function Categories() {
           name: subCategoryName,
           parentCategoryId: subCategoryParentId,
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization:` Bearer ${token}` } }
       );
       setSubCategoryName("");
       setShowSubCategoryModal(false);
