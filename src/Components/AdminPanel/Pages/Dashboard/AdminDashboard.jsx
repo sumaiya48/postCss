@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   LineChart,
   Line,
@@ -8,43 +9,6 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// --- Data for the chart (no changes needed here) ---
-const chartData = [
-  { month: "Jan", earnings: 4000, orders: 2400, customers: 2400 },
-  { month: "Feb", earnings: 3000, orders: 1398, customers: 2210 },
-  { month: "Mar", earnings: 9800, orders: 2000, customers: 2290 }, // Swapped values to better match target chart shape
-  { month: "Apr", earnings: 3908, orders: 2780, customers: 2000 },
-  { month: "May", earnings: 4800, orders: 1890, customers: 2181 },
-  { month: "Jun", earnings: 3800, orders: 2390, customers: 2500 },
-];
-
-// --- UPDATED: Stat card data array ---
-// We remove the icon and change `color` to be the border color class
-const statsData = [
-  {
-    label: "Total Earnings",
-    value: "51.6K",
-    borderColor: "border-green-400",
-  },
-  {
-    label: "Total Orders",
-    value: "85K",
-    borderColor: "border-purple-400",
-  },
-  {
-    label: "Total Products",
-    value: "4.5K",
-    borderColor: "border-cyan-400",
-  },
-  {
-    label: "Total Customers",
-    value: "11.6K",
-    borderColor: "border-orange-400",
-  },
-];
-
-// --- NEW: Custom Legend for the Chart ---
-// This component replaces the default Recharts legend.
 const CustomLegend = () => (
   <div className="absolute top-0 right-4 flex items-center space-x-4 text-xs text-gray-500">
     <div className="flex items-center">
@@ -63,10 +27,193 @@ const CustomLegend = () => (
 );
 
 export default function AdminDashboard() {
+  const token = localStorage.getItem("authToken");
+
+  const [productCount, setProductCount] = useState(0);
+  const [customerCount, setCustomerCount] = useState(0);
+  const [orderCount, setOrderCount] = useState(0);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [chartData, setChartData] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [topProducts, setTopProducts] = useState([]);
+  const [topSellingProducts, setTopSellingProducts] = useState([]);
+  const [timeFilter, setTimeFilter] = useState("week"); // 'week', 'month', 'year'
+
+  // NEW: State to hold all orders fetched
+  const [orders, setOrders] = useState([]);
+
+  // Fetch orders once, setOrders
+  useEffect(() => {
+    fetch("https://test.api.dpmsign.com/api/order", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const ordersData = data?.data?.orders || [];
+        setOrders(ordersData);
+
+        // Set recent orders
+        const sortedOrders = [...ordersData].sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        );
+        setRecentOrders(sortedOrders.slice(0, 5));
+
+        // Top products by frequency
+        const productMap = {};
+        ordersData.forEach((order) => {
+          order.items?.forEach((item) => {
+            const key = item.productId;
+            if (!productMap[key]) {
+              productMap[key] = {
+                name: item.productName || "Unknown",
+                sku: item.sku || "",
+                count: 0,
+              };
+            }
+            productMap[key].count += item.quantity || 0;
+          });
+        });
+
+        const top = Object.values(productMap)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5);
+        setTopProducts(top);
+
+        // Top Selling Products (another logic)
+        const productSalesMap = {};
+        ordersData.forEach((order) => {
+          order.orderItems?.forEach((item) => {
+            const id = item.productId;
+            const name = item.product?.name || "Unnamed Product";
+            const code = item.product?.sku || "N/A";
+            const category = item.product?.category || "N/A";
+
+            if (!productSalesMap[id]) {
+              productSalesMap[id] = {
+                productId: id,
+                name,
+                code,
+                category,
+                sold: 0,
+              };
+            }
+
+            productSalesMap[id].sold += item.quantity;
+          });
+        });
+
+        const sortedProducts = Object.values(productSalesMap).sort(
+          (a, b) => b.sold - a.sold
+        );
+        setTopSellingProducts(sortedProducts.slice(0, 5)); // top 5
+      })
+      .catch((err) => console.error("Order fetch error:", err));
+  }, [token]);
+
+  // Fetch product count and customer count
+  useEffect(() => {
+    fetch("https://test.api.dpmsign.com/api/product")
+      .then((res) => res.json())
+      .then((data) => {
+        setProductCount(data?.data?.products?.length || 0);
+      });
+
+    fetch("https://test.api.dpmsign.com/api/customer", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const total =
+          data?.data?.total ??
+          (Array.isArray(data?.data?.customers)
+            ? data.data.customers.length
+            : 0);
+        setCustomerCount(total);
+      });
+  }, [token]);
+
+  // Filter and process orders when orders, timeFilter or customerCount changes
+  useEffect(() => {
+    if (!orders.length) return;
+
+    const isInTimeRange = (dateStr, range) => {
+      const now = new Date();
+      const targetDate = new Date(dateStr);
+      const diffTime = now - targetDate;
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+      if (range === "week") return diffDays <= 7;
+      if (range === "month")
+        return (
+          targetDate.getMonth() === now.getMonth() &&
+          targetDate.getFullYear() === now.getFullYear()
+        );
+      if (range === "year") return targetDate.getFullYear() === now.getFullYear();
+      return true;
+    };
+
+    const filteredOrders = orders.filter((order) =>
+      isInTimeRange(order.createdAt, timeFilter)
+    );
+
+    setOrderCount(filteredOrders.length);
+
+    const earnings = filteredOrders.reduce(
+      (sum, o) => sum + Number(o.orderTotalPrice || 0),
+      0
+    );
+    setTotalEarnings(earnings);
+
+    // Chart Data
+    const monthlyData = {};
+    filteredOrders.forEach((order) => {
+      const date = new Date(order.createdAt);
+      const month = date.toLocaleString("default", { month: "short" });
+      if (!monthlyData[month]) monthlyData[month] = { earnings: 0, orders: 0 };
+      monthlyData[month].earnings += Number(order.totalAmount || 0);
+      monthlyData[month].orders += 1;
+    });
+
+    setChartData(
+      Object.entries(monthlyData).map(([month, val]) => ({
+        month,
+        earnings: val.earnings,
+        orders: val.orders,
+        customers: customerCount,
+      }))
+    );
+  }, [orders, timeFilter, customerCount]);
+
+  const statsData = [
+    {
+      label: "Total Earnings",
+      value: `$${Number(totalEarnings || 0).toLocaleString()}`,
+      borderColor: "border-green-400",
+    },
+    {
+      label: "Total Orders",
+      value: orderCount,
+      borderColor: "border-purple-400",
+    },
+    {
+      label: "Total Products",
+      value: productCount,
+      borderColor: "border-cyan-400",
+    },
+    {
+      label: "Total Customers",
+      value: customerCount,
+      borderColor: "border-orange-400",
+    },
+  ];
+
   return (
-    // Use a light background for the whole page to make the white cards pop
     <div className="p-6 bg-gray-50 min-h-full space-y-6">
-      {/* --- UPDATED: Header with filter buttons --- */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Hello, Admin</h1>
@@ -75,24 +222,31 @@ export default function AdminDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm shadow hover:bg-blue-700 transition-colors">
-            This week
-          </button>
-          <button className="bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border hover:bg-gray-100 transition-colors">
-            This month
-          </button>
-          <button className="bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border hover:bg-gray-100 transition-colors">
-            This year
-          </button>
+          {["week", "month", "year"].map((range) => (
+            <button
+              key={range}
+              onClick={() => setTimeFilter(range)}
+              className={`px-4 py-2 rounded-lg text-sm border transition-colors ${
+                timeFilter === range
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              {range === "week"
+                ? "This Week"
+                : range === "month"
+                ? "This Month"
+                : "This Year"}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* --- UPDATED: Stat Cards rendering logic --- */}
+      {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {statsData.map((stat, index) => (
           <div
             key={index}
-            // New styling: white background, padding, shadow, and the dynamic left border
             className={`bg-white p-5 rounded-lg shadow-md border-l-4 ${stat.borderColor}`}
           >
             <p className="text-3xl font-bold">{stat.value}</p>
@@ -101,23 +255,18 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* --- UPDATED: Main Grid Layout (2/3 and 1/3) --- */}
+      {/* Chart & Orders */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart (Left Column) */}
         <div className="lg:col-span-2 bg-white rounded-lg shadow p-4 relative">
           <h3 className="text-lg font-semibold mb-2">Earnings</h3>
-          <p className="text-sm text-gray-500 mb-4">January - June 2024</p>
-          <CustomLegend /> {/* Use our new custom legend */}
+          <p className="text-sm text-gray-500 mb-4">Monthly Overview</p>
+          <CustomLegend />
           <ResponsiveContainer width="100%" height={350}>
-            <LineChart
-              data={chartData}
-              margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
-            >
+            <LineChart data={chartData} margin={{ top: 20, right: 30 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="month" axisLine={false} tickLine={false} />
               <YAxis axisLine={false} tickLine={false} />
               <Tooltip />
-              {/* REMOVED the default <Legend /> component */}
               <Line
                 type="monotone"
                 dataKey="earnings"
@@ -143,70 +292,55 @@ export default function AdminDashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Recent Orders (Right Column) */}
+        {/* Recent Orders */}
         <div className="bg-white rounded-lg p-4 shadow">
           <h2 className="font-semibold text-lg mb-4">Recent Orders</h2>
           <div className="space-y-4">
-            {Array(6)
-              .fill(null)
-              .map((_, i) => (
-                <div key={i} className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={`https://i.pravatar.cc/40?img=${i + 1}`}
-                      className="w-10 h-10 rounded-full"
-                      alt="avatar"
-                    />
-                    <div>
-                      <h4 className="font-semibold text-sm">Olivia Martin</h4>
-                      <p className="text-xs text-gray-500">martin@gmail.com</p>
-                    </div>
-                  </div>
-                  <p className="text-sm font-bold">$1,000</p>
+            {recentOrders.map((order, i) => (
+              <div key={i} className="flex justify-between items-center">
+                <div>
+                  <h4 className="font-semibold text-sm">#{order.orderId}</h4>
+                  <p className="text-xs text-gray-500">
+                    {new Date(order.createdAt).toLocaleDateString()}
+                  </p>
                 </div>
-              ))}
+                <p className="text-sm font-bold">
+                  ${Number(order.orderTotalPrice || 0).toFixed(2)}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Top Selling Products table (no layout changes needed here) */}
+      {/* Top Products */}
       <div className="bg-white rounded-lg p-4 shadow">
         <h2 className="font-semibold text-lg mb-4">Top Selling Products</h2>
         <div className="overflow-x-auto">
           <table className="table w-full">
-            {/* head */}
             <thead>
               <tr className="text-sm text-gray-500 uppercase">
                 <th>S/No</th>
                 <th>Product Name</th>
-                <th>Product Code</th>
-                <th>Category</th>
+                <th>SKU</th>
                 <th>Sold</th>
               </tr>
             </thead>
             <tbody>
-              {/* row 1 */}
-              <tr>
-                <td>#1</td>
-                <td>3D LED Signage</td>
-                <td>DPM001</td>
-                <td>Award Crest</td>
-                <td>120.4K</td>
-              </tr>
-              {/* row 2 */}
-              <tr>
-                <td>#2</td>
-                <td>Signage</td>
-                <td>DPM003</td>
-                <td>Award Crest</td>
-                <td>20.4K</td>
-              </tr>
+              {topSellingProducts.map((product, index) => (
+                <tr key={product.productId}>
+                  <td>#{index + 1}</td>
+                  <td>{product.name}</td>
+                  <td>{product.code}</td>
+                  <td>{product.sold}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* --- NEW: Floating Welcome Banner --- */}
+      {/* Welcome Banner */}
       <div className="fixed bottom-8 right-8 bg-green-500 text-white px-6 py-3 rounded-lg shadow-xl">
         <h4 className="font-bold">Welcome back, Admin!</h4>
         <p className="text-sm">Ready to take charge and make things happen?</p>

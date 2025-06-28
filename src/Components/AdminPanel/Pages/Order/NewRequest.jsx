@@ -37,7 +37,7 @@ export default function Pending() {
       const url = "https://test.api.dpmsign.com/api/order?filteredBy=requested";
       const res = await fetch(url, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization:` Bearer ${token}`,
         },
       });
       if (!res.ok) throw new Error("Failed to fetch pending orders");
@@ -101,6 +101,30 @@ export default function Pending() {
     setFilteredOrders(sorted);
   };
 
+  const handleStatusChange = async (orderId, newStatus) => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const res = await fetch(`https://test.api.dpmsign.com/api/order/${orderId}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status: newStatus }),
+    });
+
+    if (!res.ok) throw new Error("Failed to update status");
+
+    // Remove from pending list if status is no longer valid
+    const updated = orders.filter((o) => o.orderId !== orderId);
+    setOrders(updated);
+    setFilteredOrders(updated);
+  } catch (err) {
+    alert("Failed to update status");
+  }
+};
+
+
   return (
     <div className="p-6 max-w-6xl mx-auto bg-gray-50 min-h-screen">
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -162,7 +186,41 @@ export default function Pending() {
                   <td className="text-center">{order.orderItems?.length || 0}</td>
                   <td>{order.orderTotalPrice?.toLocaleString("en-BD") || "-"}</td>
                   <td>{statusBadge(order.paymentStatus)}</td>
-                  <td>{statusBadge(order.status)}</td>
+                  <td className="relative">
+  <details className="dropdown dropdown-end">
+    <summary className="btn btn-xs btn-outline capitalize">
+      {order.status.replace(/-/g, " ")}
+    </summary>
+    <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 text-xs">
+      {[
+        "order-request-received",
+        "consultation-in-progress",
+        "awaiting-advance-payment",
+        "advance-payment-received",
+        "design-in-progress",
+        "awaiting-design-approval",
+        "production-started",
+        "production-in-progress",
+        "ready-for-delivery",
+        "out-for-delivery",
+        "order-completed",
+        "order-canceled",
+      ].map((statusOption) => (
+        <li key={statusOption}>
+          <button
+            onClick={() => handleStatusChange(order.orderId, statusOption)}
+            className={`capitalize ${
+              statusOption === order.status ? "text-primary" : ""
+            }`}
+          >
+            {statusOption.replace(/-/g, " ")}
+          </button>
+        </li>
+      ))}
+    </ul>
+  </details>
+</td>
+
                   <td className="whitespace-nowrap">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
                 </tr>
               ))}
