@@ -1,6 +1,4 @@
 // AdminSidebar.jsx
-
-import { useState } from "react";
 import { NavLink, Link, useNavigate } from "react-router-dom";
 import {
   FaChartLine,
@@ -27,7 +25,7 @@ import {
   FaUserEdit,
 } from "react-icons/fa";
 
-// --- NEW: Data-driven menu for easier management ---
+// --- Menu Items ---
 const menuItems = [
   { label: "Dashboard", icon: <FaChartLine />, path: "/dashboard" },
   { label: "POS System", icon: <FaShoppingCart />, path: "/pos" },
@@ -64,8 +62,7 @@ const menuItems = [
   { label: "FAQ", icon: <FaQuestionCircle />, path: "/faq" },
 ];
 
-export default function AdminSidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -80,14 +77,6 @@ export default function AdminSidebar() {
         isCollapsed ? "w-20" : "w-64"
       } duration-300 relative`}
     >
-      {/* Toggle Collapse Button */}
-      <button
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute top-6 -right-3.5 bg-white border-2 border-blue-500 text-blue-500 rounded-full p-1 z-10 hover:bg-blue-500 hover:text-white transition-all"
-      >
-        {isCollapsed ? <FaAngleDoubleRight /> : <FaAngleDoubleLeft />}
-      </button>
-
       {/* Logo and Search Section */}
       <div className="p-4 border-b">
         <div className="flex items-center gap-2 mb-4 h-10">
@@ -118,7 +107,6 @@ export default function AdminSidebar() {
       <nav className="flex-grow p-2 space-y-1 overflow-y-auto">
         {menuItems.map((item) =>
           item.children ? (
-            // --- UPDATED: Using daisyUI collapse for cleaner dropdowns ---
             <div
               key={item.label}
               className={`collapse collapse-arrow bg-base-100 min-h-0 rounded-lg p-0 ${
@@ -134,7 +122,6 @@ export default function AdminSidebar() {
                 <ul className="menu menu-sm p-0 pl-8">
                   {item.children.map((child) => (
                     <li key={child.label}>
-                      {/* Use NavLink for sub-items too */}
                       <NavLink
                         to={child.path}
                         className={({ isActive }) =>
@@ -153,7 +140,6 @@ export default function AdminSidebar() {
               </div>
             </div>
           ) : (
-            // --- UPDATED: Using NavLink for active route styling ---
             <NavLink
               key={item.label}
               to={item.path}
@@ -166,7 +152,7 @@ export default function AdminSidebar() {
                     : "text-gray-600"
                 }`
               }
-              title={isCollapsed ? item.label : ""} // Show label as tooltip when collapsed
+              title={isCollapsed ? item.label : ""}
             >
               <span className="text-xl">{item.icon}</span>
               {!isCollapsed && <span>{item.label}</span>}
@@ -175,7 +161,7 @@ export default function AdminSidebar() {
         )}
       </nav>
 
-      {/* --- UPDATED: Admin Footer with interactive daisyUI dropdown --- */}
+      {/* Footer */}
       <div className="p-2 border-t mt-auto">
         <div className="dropdown dropdown-top w-full">
           <div
@@ -196,7 +182,6 @@ export default function AdminSidebar() {
             </div>
             {!isCollapsed && <FaChevronDown className="transform -rotate-90" />}
           </div>
-          {/* Dropdown Content Menu */}
           <ul
             tabIndex={0}
             className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 mb-2"
@@ -214,6 +199,13 @@ export default function AdminSidebar() {
           </ul>
         </div>
       </div>
+      // Updated portion only — place this inside your component
+<button
+  onClick={() => setIsCollapsed(!isCollapsed)}
+  className="absolute top-6 -right-3.5 bg-white border-2 border-blue-500 text-blue-500 rounded-full p-1 z-10 hover:bg-blue-500 hover:text-white transition-all"
+>
+  {isCollapsed ? <FaAngleDoubleRight /> : <FaAngleDoubleLeft />}
+</button>
     </div>
   );
 }

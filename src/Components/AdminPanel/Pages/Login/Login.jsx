@@ -32,9 +32,13 @@ export default function Login() {
       // like { success: true, token: "your_jwt_token" }
       const authToken = response.data.data.authToken;
 
+
+      
       if (authToken) {
         // Save the token to local storage
         localStorage.setItem("authToken", authToken);
+        localStorage.setItem("userData", JSON.stringify(response.data.data.user));
+
         // Navigate to the dashboard after successful login
         navigate("/dashboard");
       } else {

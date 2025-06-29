@@ -1,14 +1,29 @@
 import React, { useEffect, useState } from "react";
-import { FaSync, FaFileCsv, FaFileExcel, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
+import {
+  FaSync,
+  FaFileCsv,
+  FaFileExcel,
+  FaSortAlphaDown,
+  FaSortAlphaUp,
+} from "react-icons/fa";
 import * as XLSX from "xlsx";
 
 const statusBadge = (status) => {
-  const badgeClass = "badge px-2 py-0.5 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]";
+  const badgeClass =
+    "badge px-2 py-0.5 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]";
   switch (status) {
     case "pending":
-      return <span className={`${badgeClass} badge-error badge-outline`}>Pending</span>;
+      return (
+        <span className={`${badgeClass} badge-error badge-outline`}>
+          Pending
+        </span>
+      );
     case "partial":
-      return <span className={`${badgeClass} badge-info badge-outline`}>Partial</span>;
+      return (
+        <span className={`${badgeClass} badge-info badge-outline`}>
+          Partial
+        </span>
+      );
     case "paid":
       return <span className={`${badgeClass} badge-success`}>Paid</span>;
     case "order-request-received":
@@ -29,30 +44,35 @@ export default function Pending() {
   const [sortField, setSortField] = useState(null);
   const [sortAsc, setSortAsc] = useState(true);
 
-  const fetchOrders = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const token = localStorage.getItem("authToken");
-      const url = "https://test.api.dpmsign.com/api/order?filteredBy=requested";
-      const res = await fetch(url, {
-        headers: {
-          Authorization:` Bearer ${token}`,
-        },
-      });
-      if (!res.ok) throw new Error("Failed to fetch pending orders");
-      const data = await res.json();
-      const pendingOrders = (data.data.orders || []).filter(
-        (o) => o.paymentStatus === "pending"
-      );
-      setOrders(pendingOrders);
-      setFilteredOrders(pendingOrders);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+ const fetchOrders = async () => {
+  setLoading(true);
+  setError(null);
+  try {
+    const token = localStorage.getItem("authToken");
+    const url = "https://test.api.dpmsign.com/api/order?filteredBy=requested";
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) throw new Error("Failed to fetch pending orders");
+    const data = await res.json();
+
+    const pendingOrders = (data.data.orders || []).filter(
+      (o) =>
+        o.paymentStatus === "pending" &&
+        o.status !== "order-canceled" // ✅ নতুন শর্ত
+    );
+
+    setOrders(pendingOrders);
+    setFilteredOrders(pendingOrders);
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     fetchOrders();
@@ -104,23 +124,41 @@ export default function Pending() {
   const handleStatusChange = async (orderId, newStatus) => {
   try {
     const token = localStorage.getItem("authToken");
-    const res = await fetch(`https://test.api.dpmsign.com/api/order/${orderId}/status`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ status: newStatus }),
-    });
+    const res = await fetch(
+      `https://test.api.dpmsign.com/api/order/update-order`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          orderId: orderId,
+          status: newStatus,
+        }),
+      }
+    );
 
-    if (!res.ok) throw new Error("Failed to update status");
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.message || "Failed to update status");
+    }
 
-    // Remove from pending list if status is no longer valid
-    const updated = orders.filter((o) => o.orderId !== orderId);
-    setOrders(updated);
-    setFilteredOrders(updated);
+    // ✅ শুধু cancel হলে লিস্ট থেকে সরাও
+    if (newStatus === "order-canceled") {
+      setOrders((prevOrders) =>
+        prevOrders.filter((o) => o.orderId !== orderId)
+      );
+      setFilteredOrders((prevOrders) =>
+        prevOrders.filter((o) => o.orderId !== orderId)
+      );
+    } else {
+      fetchOrders();
+    }
+
+    alert("Order status updated successfully!");
   } catch (err) {
-    alert("Failed to update status");
+    alert(err.message);
   }
 };
 
@@ -129,7 +167,9 @@ export default function Pending() {
     <div className="p-6 max-w-6xl mx-auto bg-gray-50 min-h-screen">
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-1">🕓 Pending Orders</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-1">
+            🕓 Pending Orders
+          </h1>
           <p className="text-sm text-gray-500">
             Review unpaid pending orders, search, sort or export.
           </p>
@@ -142,93 +182,154 @@ export default function Pending() {
             onChange={handleSearch}
             className="input input-sm input-bordered w-52"
           />
-          <button className="btn btn-sm btn-info text-white shadow" onClick={fetchOrders} disabled={loading}>
+          <button
+            className="btn btn-sm btn-info text-white shadow"
+            onClick={fetchOrders}
+            disabled={loading}
+          >
             <FaSync className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button className="btn btn-sm btn-success text-white shadow" onClick={exportToExcel}>
+          <button
+            className="btn btn-sm btn-success text-white shadow"
+            onClick={exportToExcel}
+          >
             <FaFileExcel /> Excel
           </button>
-          <button className="btn btn-sm btn-warning text-white shadow" onClick={exportToCSV}>
+          <button
+            className="btn btn-sm btn-warning text-white shadow"
+            onClick={exportToCSV}
+          >
             <FaFileCsv /> CSV
           </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto bg-white rounded-xl shadow-md">
+      <div className=" overflow-x-auto bg-white rounded-xl shadow-md max-h-[calc(100vh-200px)] overflow-y-auto min-h-screen">
         {loading ? (
-          <div className="p-8 text-center text-sm text-gray-600">Loading pending orders...</div>
+          <div className="p-8 text-center text-sm text-gray-600">
+            Loading pending orders...
+          </div>
         ) : error ? (
-          <div className="p-8 text-center text-error text-sm font-medium">{error}</div>
+          <div className="p-8 text-center text-error text-sm font-medium">
+            {error}
+          </div>
         ) : filteredOrders.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No unpaid pending orders found.</div>
+          <div className="p-8 text-center text-gray-500 text-sm">
+            No unpaid pending orders found.
+          </div>
         ) : (
           <table className="table table-xs">
             <thead className="bg-base-200 text-gray-700 text-[11px]">
               <tr>
-                <th className="cursor-pointer" onClick={() => handleSort("orderId")}>Order ID {sortField === "orderId" && (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}</th>
-                <th className="cursor-pointer" onClick={() => handleSort("customerName")}>Customer {sortField === "customerName" && (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}</th>
+                <th
+                  className="cursor-pointer"
+                  onClick={() => handleSort("orderId")}
+                >
+                  Order ID{" "}
+                  {sortField === "orderId" &&
+                    (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}
+                </th>
+                <th
+                  className="cursor-pointer"
+                  onClick={() => handleSort("customerName")}
+                >
+                  Customer{" "}
+                  {sortField === "customerName" &&
+                    (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}
+                </th>
                 <th>Phone</th>
                 <th>Address</th>
                 <th>Items</th>
-                <th className="cursor-pointer" onClick={() => handleSort("orderTotalPrice")}>Total (৳) {sortField === "orderTotalPrice" && (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}</th>
+                <th
+                  className="cursor-pointer"
+                  onClick={() => handleSort("orderTotalPrice")}
+                >
+                  Total (৳){" "}
+                  {sortField === "orderTotalPrice" &&
+                    (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}
+                </th>
                 <th>Payment</th>
                 <th>Status</th>
-                <th className="cursor-pointer" onClick={() => handleSort("createdAt")}>Created {sortField === "createdAt" && (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}</th>
+                <th
+                  className="cursor-pointer"
+                  onClick={() => handleSort("createdAt")}
+                >
+                  Created{" "}
+                  {sortField === "createdAt" &&
+                    (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}
+                </th>
               </tr>
             </thead>
             <tbody>
               {filteredOrders.map((order) => (
                 <tr key={order.orderId} className="hover text-xs">
-                  <td className="font-semibold text-gray-800">#{order.orderId}</td>
+                  <td className="font-semibold text-gray-800">
+                    #{order.orderId}
+                  </td>
                   <td>{order.customerName}</td>
                   <td>{order.customerPhone}</td>
-                  <td className="max-w-[150px] truncate">{order.billingAddress}</td>
-                  <td className="text-center">{order.orderItems?.length || 0}</td>
-                  <td>{order.orderTotalPrice?.toLocaleString("en-BD") || "-"}</td>
+                  <td className="max-w-[150px] truncate">
+                    {order.billingAddress}
+                  </td>
+                  <td className="text-center">
+                    {order.orderItems?.length || 0}
+                  </td>
+                  <td>
+                    {order.orderTotalPrice?.toLocaleString("en-BD") || "-"}
+                  </td>
                   <td>{statusBadge(order.paymentStatus)}</td>
                   <td className="relative">
-  <details className="dropdown dropdown-end">
-    <summary className="btn btn-xs btn-outline capitalize">
-      {order.status.replace(/-/g, " ")}
-    </summary>
-    <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 text-xs">
-      {[
-        "order-request-received",
-        "consultation-in-progress",
-        "awaiting-advance-payment",
-        "advance-payment-received",
-        "design-in-progress",
-        "awaiting-design-approval",
-        "production-started",
-        "production-in-progress",
-        "ready-for-delivery",
-        "out-for-delivery",
-        "order-completed",
-        "order-canceled",
-      ].map((statusOption) => (
-        <li key={statusOption}>
-          <button
-            onClick={() => handleStatusChange(order.orderId, statusOption)}
-            className={`capitalize ${
-              statusOption === order.status ? "text-primary" : ""
-            }`}
-          >
-            {statusOption.replace(/-/g, " ")}
-          </button>
-        </li>
-      ))}
-    </ul>
-  </details>
-</td>
+                    <details className="dropdown dropdown-end">
+                      <summary className="btn btn-xs btn-outline capitalize">
+                        {order.status.replace(/-/g, " ")}
+                      </summary>
+                      <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 text-xs">
+                        {[
+                          "order-request-received",
+                          "consultation-in-progress",
+                          "awaiting-advance-payment",
+                          "advance-payment-received",
+                          "design-in-progress",
+                          "awaiting-design-approval",
+                          "production-started",
+                          "production-in-progress",
+                          "ready-for-delivery",
+                          "out-for-delivery",
+                          "order-completed",
+                          "order-canceled",
+                        ].map((statusOption) => (
+                          <li key={statusOption}>
+                            <button
+                              onClick={() =>
+                                handleStatusChange(order.orderId, statusOption)
+                              }
+                              className={`capitalize ${
+                                statusOption === order.status
+                                  ? "text-primary"
+                                  : ""
+                              }`}
+                            >
+                              {statusOption.replace(/-/g, " ")}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </td>
 
-                  <td className="whitespace-nowrap">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
+                  <td className="whitespace-nowrap">
+                    {order.createdAt
+                      ? new Date(order.createdAt).toLocaleString()
+                      : "-"}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         <div className="p-4 text-xs text-gray-500 border-t text-right">
-          Showing {filteredOrders.length} entr{filteredOrders.length === 1 ? "y" : "ies"}
+          Showing {filteredOrders.length} entr
+          {filteredOrders.length === 1 ? "y" : "ies"}
         </div>
       </div>
     </div>
