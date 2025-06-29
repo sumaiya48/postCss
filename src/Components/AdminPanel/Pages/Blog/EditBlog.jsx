@@ -45,6 +45,8 @@ export default function EditBlog() {
     body.append("blogId", blogId);
     body.append("title", formData.title);
     body.append("content", formData.content);
+
+    // Only append image if a new one is selected
     if (formData.bannerImg) {
       body.append("bannerImg", formData.bannerImg);
     }

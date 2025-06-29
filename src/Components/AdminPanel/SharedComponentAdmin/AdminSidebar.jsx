@@ -1,4 +1,4 @@
-// AdminSidebar.jsx
+import React, { useState } from "react";
 import { NavLink, Link, useNavigate } from "react-router-dom";
 import {
   FaChartLine,
@@ -64,12 +64,25 @@ const menuItems = [
 
 export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
   const navigate = useNavigate();
+  const [searchText, setSearchText] = useState("");
 
   const handleLogout = () => {
     localStorage.removeItem("authToken");
     localStorage.removeItem("adminUser");
     navigate("/login");
   };
+
+  // Filter menu items based on search text (case-insensitive)
+  const filteredMenuItems = menuItems.filter((item) => {
+    if (item.label.toLowerCase().includes(searchText.toLowerCase())) return true;
+    if (item.children) {
+      // Check if any child matches
+      return item.children.some((child) =>
+        child.label.toLowerCase().includes(searchText.toLowerCase())
+      );
+    }
+    return false;
+  });
 
   return (
     <div
@@ -97,6 +110,8 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
               type="text"
               placeholder="Search"
               className="input input-bordered w-full h-10"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
             />
             <FaSearch className="absolute top-1/2 right-3 transform -translate-y-1/2 text-gray-400" />
           </div>
@@ -105,7 +120,7 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
 
       {/* Navigation Menu */}
       <nav className="flex-grow p-2 space-y-1 overflow-y-auto">
-        {menuItems.map((item) =>
+        {filteredMenuItems.map((item) =>
           item.children ? (
             <div
               key={item.label}
@@ -120,22 +135,24 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
               </div>
               <div className="collapse-content !p-0">
                 <ul className="menu menu-sm p-0 pl-8">
-                  {item.children.map((child) => (
-                    <li key={child.label}>
-                      <NavLink
-                        to={child.path}
-                        className={({ isActive }) =>
-                          `py-2 rounded-none ${
-                            isActive
-                              ? "bg-blue-100 text-blue-700 font-semibold"
-                              : ""
-                          }`
-                        }
-                      >
-                        {child.label}
-                      </NavLink>
-                    </li>
-                  ))}
+                  {item.children
+                    .filter((child) =>
+                      child.label.toLowerCase().includes(searchText.toLowerCase())
+                    )
+                    .map((child) => (
+                      <li key={child.label}>
+                        <NavLink
+                          to={child.path}
+                          className={({ isActive }) =>
+                            `py-2 rounded-none ${
+                              isActive ? "bg-blue-100 text-blue-700 font-semibold" : ""
+                            }`
+                          }
+                        >
+                          {child.label}
+                        </NavLink>
+                      </li>
+                    ))}
                 </ul>
               </div>
             </div>
@@ -147,9 +164,7 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
                 `flex items-center gap-3 p-3 rounded-lg text-sm transition-colors hover:bg-gray-100 ${
                   isCollapsed ? "justify-center" : ""
                 } ${
-                  isActive
-                    ? "bg-blue-500 text-white font-semibold shadow"
-                    : "text-gray-600"
+                  isActive ? "bg-blue-500 text-white font-semibold shadow" : "text-gray-600"
                 }`
               }
               title={isCollapsed ? item.label : ""}
@@ -199,13 +214,15 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
           </ul>
         </div>
       </div>
-      // Updated portion only — place this inside your component
-<button
-  onClick={() => setIsCollapsed(!isCollapsed)}
-  className="absolute top-6 -right-3.5 bg-white border-2 border-blue-500 text-blue-500 rounded-full p-1 z-10 hover:bg-blue-500 hover:text-white transition-all"
->
-  {isCollapsed ? <FaAngleDoubleRight /> : <FaAngleDoubleLeft />}
-</button>
+
+      {/* Collapse Button */}
+      <button
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="absolute top-6 -right-3.5 bg-white border-2 border-blue-500 text-blue-500 rounded-full p-1 z-10 hover:bg-blue-500 hover:text-white transition-all"
+        aria-label="Toggle Sidebar"
+      >
+        {isCollapsed ? <FaAngleDoubleRight /> : <FaAngleDoubleLeft />}
+      </button>
     </div>
   );
 }

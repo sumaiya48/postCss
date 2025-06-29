@@ -39,9 +39,17 @@ const [selectedCourierId, setSelectedCourierId] = useState(null);
   const [orderDate, setOrderDate] = useState(new Date());
   const [deliveryDate, setDeliveryDate] = useState(new Date());
 
-const userData = JSON.parse(localStorage.getItem("userData"));
+  const userDataString = localStorage.getItem("userData");
+
+const userData =
+  userDataString && userDataString !== "undefined"
+    ? JSON.parse(userDataString)
+    : null;
+
+
 const userRole = userData?.role || "staff";
 const staffIdFromStorage = userData?.staffId || null;
+
 
 // staffId must be number or null
 const staffIdToSend =
@@ -237,10 +245,10 @@ const handleProductClick = (product) => {
  const handleSaveAndPrint = async () => {
   const token = localStorage.getItem("authToken");
 
-  // userData থেকে role আর staffId নিচ্ছি
-  const userData = JSON.parse(localStorage.getItem("userData"));
-  const userRole = userData?.role || "staff"; // role নেই মানে staff ধরা হবে
-  const staffIdFromStorage = userData?.staffId || null;
+const userDataString = localStorage.getItem("userData");
+const userData = userDataString ? JSON.parse(userDataString) : null;
+const userRole = userData?.role || "staff";
+const staffIdFromStorage = userData?.staffId || null;
 // যদি appliedCoupon থাকে তার থেকে id নিতে হবে
 const couponIdToSend = appliedCoupon ? appliedCoupon.couponId : null;
   // Admin হলে null, Staff হলে staffId পাঠাবে

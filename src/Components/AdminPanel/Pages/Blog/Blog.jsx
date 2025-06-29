@@ -94,15 +94,18 @@ export default function Blog() {
       {/* Header */}
       <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
         <h2 className="text-3xl font-bold">Blogs</h2>
-        <div className="flex gap-2 flex-wrap">
-          <input
+        <div className="flex gap-4 flex-wrap">
+          <div>
+            <input
             type="search"
             placeholder="Search title..."
             className="input input-bordered input-sm w-60"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <select
+          </div>
+         <div>
+           <select
             className="select select-bordered select-sm"
             value={sortType}
             onChange={e => setSortType(e.target.value)}
@@ -113,15 +116,19 @@ export default function Blog() {
             <option value="oldest">Oldest</option>
             <option value="newest">Newest</option>
           </select>
-          {token && (
+         </div>
+          
+        </div>
+      </div>
+      <div className="flex justify-end">
+        {token && (
             <button
-              className="btn btn-primary btn-sm flex items-center gap-2"
+              className="btn btn-primary  flex items-center gap-2"
               onClick={() => navigate("/add-blog")}
             >
               <FaPlus /> Add Blog
             </button>
           )}
-        </div>
       </div>
 
       {/* Content */}
@@ -130,7 +137,7 @@ export default function Blog() {
       ) : !currentData.length ? (
         <p>No blogs found.</p>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mt-5">
           {currentData.map(blog => (
             <div
               key={blog.blogId}

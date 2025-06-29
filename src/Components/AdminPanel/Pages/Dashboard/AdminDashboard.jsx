@@ -10,7 +10,7 @@ import {
 } from "recharts";
 
 const CustomLegend = () => (
-  <div className="absolute top-0 right-4 flex items-center space-x-4 text-xs text-gray-500">
+  <div className="absolute top-0 right-4 flex items-center mt-5 space-x-4 text-xs text-gray-500">
     <div className="flex items-center">
       <div className="w-3 h-3 rounded-full bg-[#10B981] mr-2"></div>
       <span>Earnings</span>
@@ -259,7 +259,13 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-lg shadow p-4 relative">
           <h3 className="text-lg font-semibold mb-2">Earnings</h3>
-          <p className="text-sm text-gray-500 mb-4">Monthly Overview</p>
+           <p className="text-sm text-gray-500 mb-4">
+      {timeFilter === "week"
+        ? "Weekly Overview"
+        : timeFilter === "month"
+        ? "Monthly Overview"
+        : "Yearly Overview"}
+    </p>
           <CustomLegend />
           <ResponsiveContainer width="100%" height={350}>
             <LineChart data={chartData} margin={{ top: 20, right: 30 }}>
