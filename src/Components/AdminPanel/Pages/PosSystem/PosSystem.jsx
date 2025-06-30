@@ -1,19 +1,23 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Select from "react-select";
 
 import axios from "axios";
 import { FaArrowLeft, FaUser, FaTrash } from "react-icons/fa";
 import Swal from "sweetalert2";
 import { FaCalendarAlt } from "react-icons/fa";
+import InvoiceGenerator from "./InvoiceGenerator";
+import POSLeftPanel from "./PosLeftPanel";
+
+
 const POSDashboard = () => {
+  // 1. STATE DECLARATIONS
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [filters, setFilters] = useState({ categoryId: null });
   const [selectedItems, setSelectedItems] = useState([]);
   const [searchText, setSearchText] = useState("");
-const [staffList, setStaffList] = useState([]);
-const [selectedStaffId, setSelectedStaffId] = useState(null);
-
+  const [staffList, setStaffList] = useState([]);
+  const [selectedStaffId, setSelectedStaffId] = useState(null);
 
   const [customers, setCustomers] = useState([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
@@ -27,53 +31,78 @@ const [selectedStaffId, setSelectedStaffId] = useState(null);
   const [deliveryMethod, setDeliveryMethod] = useState("shop-pickup");
   const [paymentStatus, setPaymentStatus] = useState("pending");
   const [courierAddressInput, setCourierAddressInput] = useState("");
-const [notesInput, setNotesInput] = useState("");
-const [paymentAmount, setPaymentAmount] = useState(0);
-const [selectedCourierId, setSelectedCourierId] = useState(null);
+  const [notesInput, setNotesInput] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState(0);
 
+  const [couriers, setCouriers] = useState([]);
+  const [selectedCourierId, setSelectedCourierId] = useState(null);
 
-  // Next order id state
   const [nextOrderId, setNextOrderId] = useState(null);
-
-  // Date states (Date objects)
   const [orderDate, setOrderDate] = useState(new Date());
   const [deliveryDate, setDeliveryDate] = useState(new Date());
 
+  // NEW state for InvoiceGenerator
+  const [triggerInvoiceGenerate, setTriggerInvoiceGenerate] = useState(false);
+  const [invoiceDataForGenerator, setInvoiceDataForGenerator] = useState(null);
+
+  // Derived values from localStorage
   const userDataString = localStorage.getItem("userData");
+  const userData =
+    userDataString && userDataString !== "undefined"
+      ? JSON.parse(userDataString)
+      : null;
 
-const userData =
-  userDataString && userDataString !== "undefined"
-    ? JSON.parse(userDataString)
-    : null;
+  const userRole = userData?.role || "staff";
+  const staffIdFromStorage = userData?.staffId || null;
 
+  const staffIdToSend =
+    userRole === "admin"
+      ? null
+      : staffIdFromStorage !== null
+        ? Number(staffIdFromStorage)
+        : null;
 
-const userRole = userData?.role || "staff";
-const staffIdFromStorage = userData?.staffId || null;
+  // --- Define calculateItemTotal here, within the component's scope ---
+  const calculateItemTotal = useCallback((item) => {
+    let pricePerUnit = Number(item.customUnitPrice || 0);
+    let quantity = Number(item.quantity || 0);
+    let total = 0;
 
+    if (item.pricingType === "square-feet") {
+      const width = Number(item.widthInch || 0);
+      const height = Number(item.heightInch || 0);
 
-// staffId must be number or null
-const staffIdToSend =
-  userRole === "admin"
-    ? null
-    : staffIdFromStorage !== null
-    ? Number(staffIdFromStorage)
-    : null;
-
-
-
-
-  useEffect(() => {
-    fetchNextOrderId();
+      if (width > 0 && height > 0) {
+        const areaSquareFeet = width * height;
+        total = areaSquareFeet * pricePerUnit * quantity;
+      } else {
+        total = 0; // If dimensions are not provided or invalid for square-feet
+      }
+    } else {
+      // pricingType === 'flat'
+      total = pricePerUnit * quantity;
+    }
+    return total;
   }, []);
+  // -------------------------------------------------------------------
 
+  // Recalculate subTotal using the new function
+  const subTotal = selectedItems.reduce(
+    (acc, item) => acc + calculateItemTotal(item),
+    0
+  );
+
+  const grossTotal = Math.max(subTotal - couponDiscount, 0);
+
+  // 2. HELPER FUNCTIONS AND CONSTANT DECLARATIONS
   const fetchNextOrderId = async () => {
     try {
       const token = localStorage.getItem("authToken");
       const res = await axios.get("https://test.api.dpmsign.com/api/order", {
+        // FULL URL
         headers: { Authorization: `Bearer ${token}` },
       });
       const orders = res.data.data.orders || [];
-      // Find max orderId
       const maxOrderId = orders.reduce(
         (max, order) => (order.orderId > max ? order.orderId : max),
         0
@@ -85,7 +114,6 @@ const staffIdToSend =
     }
   };
 
-  // Format date to yyyy-mm-dd string for input[type=date]
   const formatDate = (date) => {
     const d = new Date(date);
     const month = `${d.getMonth() + 1}`.padStart(2, "0");
@@ -94,23 +122,13 @@ const staffIdToSend =
     return [year, month, day].join("-");
   };
 
-
-  useEffect(() => {
-    fetchCategories();
-    fetchProducts();
-  }, [filters]);
-
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
   const fetchCustomers = async () => {
-    const token = localStorage.getItem("authToken"); // ✅ টোকেন নিচ্ছি
-
+    const token = localStorage.getItem("authToken");
     try {
       const res = await axios.get("https://test.api.dpmsign.com/api/customer", {
+        // FULL URL
         headers: {
-          Authorization: `Bearer ${token}`, // ✅ হেডারে টোকেন পাঠানো হচ্ছে
+          Authorization: `Bearer ${token}`,
         },
       });
       setCustomers(res.data.data.customers || []);
@@ -119,11 +137,10 @@ const staffIdToSend =
     }
   };
 
-
   const fetchProducts = async () => {
     try {
       const { data } = await axios.get(
-        "https://test.api.dpmsign.com/api/product",
+        "https://test.api.dpmsign.com/api/product", // FULL URL
         { params: { categoryId: filters.categoryId } }
       );
       setProducts(data.data.products);
@@ -133,53 +150,103 @@ const staffIdToSend =
   };
 
   const fetchCategories = async () => {
+    const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
+const all = res.data.data.categories || [];
+const topLevel = all.filter(cat => cat.parentCategoryId === null);
+setCategories(topLevel);
+
+  };
+
+  // NEW: Fetch Couriers
+  const fetchCouriers = async () => {
     try {
-      const { data } = await axios.get(
-        "https://test.api.dpmsign.com/api/product-category"
-      );
-      setCategories(data.data.categories);
+      const token = localStorage.getItem("authToken");
+      const res = await axios.get("https://test.api.dpmsign.com/api/courier", {
+        // FULL URL
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setCouriers(res.data.data.couriers || []); // Assuming response is data.data.couriers
     } catch (err) {
-      console.error("Error fetching categories:", err);
+      console.error("Failed to fetch couriers", err);
     }
   };
 
-const handleProductClick = (product) => {
-  const variantId = product?.productVariantId || product?.variants?.[0]?.productVariantId;
+  const handleProductClick = (product) => {
+    setSelectedItems((prev) => {
+      const existingItemIndex = prev.findIndex(
+        (item) => item.productId === product.productId
+      );
 
-  if (!variantId) {
-    Swal.fire("Error", "This product has no valid variant.", "error");
-    return;
-  }
+      if (existingItemIndex !== -1) {
+        const updated = [...prev];
+        updated[existingItemIndex] = {
+          ...updated[existingItemIndex],
+          quantity: updated[existingItemIndex].quantity + 1,
+        };
+        return updated;
+      } else {
+        // Add new item with initial values
+        const initialQuantity = 1;
+        const initialUnitPrice = Number(product.basePrice || 0);
 
-  setSelectedItems((prev) => {
-    const index = prev.findIndex((item) => item.productId === product.productId);
-    if (index !== -1) {
-      const updated = [...prev];
-      updated[index] = {
-        ...updated[index],
-        quantity: updated[index].quantity + 1,
-      };
-      return updated;
-    } else {
-      return [
-        ...prev,
-        {
-          ...product,
-          quantity: 1,
-          productVariantId: variantId,
-        },
-      ];
-    }
-  });
-};
+        return [
+          ...prev,
+          {
+            ...product, // Keep all product properties
+            quantity: initialQuantity,
+            productVariantId: null, // Start with NO variant selected
+            selectedVariantDetails: null, // Store selected variant details here
+            pricingType: product.pricingType, // 'flat' or 'square-feet'
+            widthInch: null, // For square-feet products, initially null or 0
+            heightInch: null, // For square-feet products, initially null or 0
+            customUnitPrice: initialUnitPrice, // Price admin can customize (per unit or per sqft)
+            availableVariants: product.variants || [], // Store the full array of available variants
+          },
+        ];
+      }
+    });
+  };
 
+  const handleVariantChange = (productId, selectedOption) => {
+    setSelectedItems((prevItems) =>
+      prevItems.map((item) => {
+        if (item.productId === productId) {
+          const newVariantId = selectedOption ? selectedOption.value : null;
+          const selectedVariant = newVariantId
+            ? item.availableVariants.find(
+              (v) => v.productVariantId === newVariantId
+            )
+            : null;
 
+          let updatedUnitPrice = Number(item.basePrice || 0);
+          if (
+            selectedVariant &&
+            selectedVariant.additionalPrice !== undefined
+          ) {
+            updatedUnitPrice = Number(selectedVariant.additionalPrice);
+          }
+
+          return {
+            ...item,
+            productVariantId: newVariantId,
+            selectedVariantDetails: selectedVariant,
+            customUnitPrice: updatedUnitPrice,
+            // Optionally update dimensions if they are variant-specific
+            // widthInch: selectedVariant?.widthInch || null,
+            // heightInch: selectedVariant?.heightInch || null,
+          };
+        }
+        return item;
+      })
+    );
+  };
 
   const getImageUrl = (product) => {
-    if (!product.images || product.images.length === 0) return "/placeholder.png";
+    if (!product.images || product.images.length === 0)
+      return "/placeholder.png";
     const imgName = product.images[0].imageName;
     if (!imgName || typeof imgName !== "string") return "/placeholder.png";
-    return `https://test.api.dpmsign.com/static/product-images/${imgName}`;
+    return `https://test.api.dpmsign.com/static/product-images/${imgName}`; // FULL URL
   };
 
   const incrementQuantity = (productId) => {
@@ -216,7 +283,7 @@ const handleProductClick = (product) => {
     }
     try {
       const res = await axios.get(
-        `https://test.api.dpmsign.com/api/coupon?code=${couponCode.trim()}`
+        `https://test.api.dpmsign.com/api/coupon?code=${couponCode.trim()}` // FULL URL
       );
       const discount = res.data.data.totalPrice - res.data.data.discountedPrice;
       if (discount > 0) {
@@ -235,163 +302,188 @@ const handleProductClick = (product) => {
     }
   };
 
-  const subTotal = selectedItems.reduce(
-    (acc, item) => acc + Number(item.basePrice || 0) * item.quantity,
-    0
-  );
+  // NEW: Callback to reset the invoice generation trigger
+  const handleInvoiceGenerated = () => {
+    setTriggerInvoiceGenerate(false);
+    setInvoiceDataForGenerator(null); // Clear data after generation
+  };
 
-  const grossTotal = Math.max(subTotal - couponDiscount, 0);
+  const handleSaveAndPrint = async () => {
+    const token = localStorage.getItem("authToken");
 
- const handleSaveAndPrint = async () => {
-  const token = localStorage.getItem("authToken");
+    const userDataString = localStorage.getItem("userData");
+    const userData =
+      userDataString && userDataString !== "undefined"
+        ? JSON.parse(userDataString)
+        : null;
 
-const userDataString = localStorage.getItem("userData");
-const userData = userDataString ? JSON.parse(userDataString) : null;
-const userRole = userData?.role || "staff";
-const staffIdFromStorage = userData?.staffId || null;
-// যদি appliedCoupon থাকে তার থেকে id নিতে হবে
-const couponIdToSend = appliedCoupon ? appliedCoupon.couponId : null;
-  // Admin হলে null, Staff হলে staffId পাঠাবে
-  const staffIdToSend = userRole === "admin" ? null : (staffIdFromStorage !== null ? Number(staffIdFromStorage) : null);
+    const userRole = userData?.role || "staff";
+    const staffIdFromStorage = userData?.staffId || null;
+    const couponIdToSend = appliedCoupon ? appliedCoupon.couponId : null;
 
-  if (!selectedCustomerId) {
-    Swal.fire("Warning", "Please select a customer", "warning");
-    return;
-  }
+    const staffIdToSend =
+      userRole === "admin"
+        ? null
+        : staffIdFromStorage !== null
+          ? Number(staffIdFromStorage)
+          : null;
 
-  const selectedCustomer = customers.find(
-    (c) => c.customerId === Number(selectedCustomerId)
-  );
-
-  if (!selectedCustomer) {
-    Swal.fire("Warning", "Selected customer not found", "warning");
-    return;
-  }
-
-  if (selectedItems.length === 0) {
-    Swal.fire("Warning", "No products selected", "warning");
-    return;
-  }
-
-  try {
-    const orderData = {
-      customerId: Number(selectedCustomerId),
-      customerName: selectedCustomer.name,
-      customerEmail: selectedCustomer.email || "",
-      customerPhone: selectedCustomer.phone,
-      staffId: staffIdToSend, // এখানে staffId পাঠাচ্ছি
-      method: paymentMethod === "online-payment" ? "online" : "offline",
-      status: "order-request-received",
-      currentStatus: "order-request-received",
-      paymentMethod,
-      paymentStatus,
-      deliveryMethod,
-      billingAddress: selectedCustomer.billingAddress || "N/A",
-      deliveryDate: formatDate(deliveryDate),
-      
-      couponId: couponIdToSend || null,
-      courierId: selectedCourierId || null,
-      courierAddress: courierAddressInput || null,
-      additionalNotes: notesInput || "",
-      orderTotalPrice: grossTotal,
-      orderItems: selectedItems.map((item) => ({
-        productId: item.productId,
-        productVariantId: item.productVariantId
-          ? Number(item.productVariantId)
-          : null,
-        quantity: item.quantity,
-        size: item.size ? Number(item.size) : null,
-        widthInch: item.widthInch ? Number(item.widthInch) : null,
-        price: Number(item.basePrice) * item.quantity,
-      })),
-      payments: [
-        {
-          orderId: 0,
-          amount: grossTotal,
-          paymentMethod,
-          customerName: selectedCustomer.name,
-          customerEmail: selectedCustomer.email || "",
-          customerPhone: selectedCustomer.phone,
-        },
-      ],
-    };
-
-    const res = await axios.post(
-      "https://test.api.dpmsign.com/api/order/create",
-      orderData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+    console.log("userData:", userData);
+    console.log("userRole:", userRole);
+    console.log(
+      "staffIdFromStorage (before Number conversion):",
+      staffIdFromStorage,
+      typeof staffIdFromStorage
+    );
+    console.log(
+      "staffIdToSend (final value):",
+      staffIdToSend,
+      typeof staffIdToSend
     );
 
-    if (res.data?.status === 200) {
-      Swal.fire("Success", "Order created successfully", "success");
-      setSelectedItems([]);
-      setCouponCode("");
-      setCouponDiscount(0);
-      setAppliedCoupon(null);
-      setSelectedCustomerId(null);
-    } else {
-      throw new Error("Failed to create order");
+    if (!selectedCustomerId) {
+      Swal.fire("Warning", "Please select a customer", "warning");
+      return;
     }
-  } catch (err) {
-    console.error("Backend Response Error:", err?.response?.data || err);
-    Swal.fire("Error", "An error occurred while saving the order.", "error");
-  }
-};
 
+    const selectedCustomer = customers.find(
+      (c) => c.customerId === Number(selectedCustomerId)
+    );
 
+    if (!selectedCustomer) {
+      Swal.fire("Warning", "Selected customer not found", "warning");
+      return;
+    }
 
+    if (selectedItems.length === 0) {
+      Swal.fire("Warning", "No products selected", "warning");
+      return;
+    }
+
+    try {
+      const orderData = {
+        customerId: Number(selectedCustomerId),
+        customerName: selectedCustomer.name,
+        customerEmail: selectedCustomer.email || "",
+        customerPhone: selectedCustomer.phone,
+        staffId: staffIdToSend,
+        method: paymentMethod === "online-payment" ? "online" : "offline",
+        status: "order-request-received",
+        currentStatus: "order-request-received",
+        paymentMethod,
+        paymentStatus,
+        deliveryMethod,
+        billingAddress: selectedCustomer.billingAddress || "N/A",
+        deliveryDate: formatDate(deliveryDate),
+
+        couponId: couponIdToSend || null,
+        courierId: selectedCourierId || null,
+        courierAddress:
+          deliveryMethod === "courier"
+            ? courierAddressInput?.trim() || "N/A"
+            : "N/A",
+        additionalNotes: notesInput || "",
+        orderItems: selectedItems.map((item) => ({
+          productId: item.productId,
+          productVariantId: item.productVariantId
+            ? Number(item.productVariantId)
+            : null,
+          quantity: item.quantity,
+          size: item.selectedVariantDetails?.size
+            ? Number(item.selectedVariantDetails.size)
+            : null,
+          widthInch: item.widthInch ? Number(item.widthInch) : null,
+          heightInch: item.heightInch ? Number(item.heightInch) : null,
+          price: Number(item.customUnitPrice),
+        })),
+      };
+      console.log("Order Data being sent:", orderData);
+
+      const res = await axios.post(
+        "https://test.api.dpmsign.com/api/order/create", // FULL URL
+        orderData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (res.data?.status === 201) {
+        Swal.fire("Success", "Order created successfully", "success").then(
+          () => {
+            const newOrderId = res.data.data.order.orderId;
+            if (newOrderId) {
+              setInvoiceDataForGenerator({
+                orderData,
+                selectedCustomer,
+                selectedItems,
+                grossTotal,
+                couponDiscount,
+                newOrderId,
+                products, // Pass the full products list
+              });
+              setTriggerInvoiceGenerate(true); // Trigger invoice generation
+            }
+
+            // Reset POS system states after successful order
+            setSelectedItems([]);
+            setCouponCode("");
+            setCouponDiscount(0);
+            setAppliedCoupon(null);
+            setSelectedCustomerId(null);
+            fetchNextOrderId();
+          }
+        );
+      } else {
+        throw new Error("Failed to create order");
+      }
+    } catch (err) {
+      console.error("Backend Response Error:", err?.response?.data || err);
+      Swal.fire("Error", "An error occurred while saving the order.", "error");
+    }
+  };
 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchText.toLowerCase())
   );
-console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
 
+  // 3. useEffect Hooks
+  useEffect(() => {
+    fetchNextOrderId();
+    fetchCouriers(); // Fetch couriers on component mount
+  }, []);
 
+  useEffect(() => {
+    fetchCategories();
+    fetchProducts();
+  }, [filters]);
 
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  // 4. Component JSX
   return (
     <div className="grid grid-cols-12 h-screen">
       {/* Left section */}
-      <div className="col-span-7 bg-gray-100 border-r p-4 overflow-y-auto">
-        <div className="flex items-center gap-2 mb-4">
-          <button className="btn btn-sm btn-primary">
-            <FaArrowLeft /> Back
-          </button>
-          <input
-            type="text"
-            placeholder="Search Here"
-            className="input input-bordered w-full"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-          />
-
-        </div>
-
-        <div className="grid grid-cols-4 gap-4">
-          {filteredProducts.map((product) => (
-            <div
-              key={product.productId}
-              className="border p-3 rounded text-center bg-white shadow hover:shadow-lg cursor-pointer"
-              onClick={() => handleProductClick(product)}
-            >
-              <img
-                src={getImageUrl(product)}
-                onError={(e) => (e.target.src = "/placeholder.png")}
-                alt={product.name}
-                className="w-16 h-16 mx-auto mb-2 object-contain"
-              />
-              <p className="text-xs font-semibold truncate">{product.name}</p>
-            </div>
-          ))}
-        </div>
+      <div className="col-span-5">
+        <POSLeftPanel
+        products={products}
+        categories={categories}
+        filters={filters}
+        setFilters={setFilters}
+        selectedItems={selectedItems}
+        setSelectedItems={setSelectedItems}
+        searchText={searchText}
+        setSearchText={setSearchText}
+        calculateItemTotal={calculateItemTotal}
+      ></POSLeftPanel>
       </div>
 
       {/* Right section */}
-      <div className="col-span-5 p-4 flex flex-col">
-        <div className="flex  justify-between items-center mb-2 gap-6">
+      <div className="col-span-7 p-4 flex flex-col">
+        <div className="flex justify-between items-center mb-2 gap-6">
           <div className="text-sm">
             <div className="mb-2">
               <p className="font-bold">
@@ -403,7 +495,10 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
             </div>
 
             <div className="mb-2 flex items-center gap-1">
-              <label htmlFor="orderDate" className="block font-semibold text-xs">
+              <label
+                htmlFor="orderDate"
+                className="block font-semibold text-xs"
+              >
                 Date:
               </label>
               <input
@@ -416,7 +511,10 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
             </div>
 
             <div className="mb-2 flex items-center gap-1">
-              <label htmlFor="deliveryDate" className="block font-semibold text-xs">
+              <label
+                htmlFor="deliveryDate"
+                className="block font-semibold text-xs"
+              >
                 Delivery Date:
               </label>
               <input
@@ -429,8 +527,10 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div>
+            <div className="flex items-center gap-2">
             <FaUser className="text-gray-600" />
+            
             <Select
               className="w-64 text-sm"
               options={customers.map((customer) => ({
@@ -446,25 +546,43 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
                   .find((option) => option.value === selectedCustomerId) || null
               }
               onChange={(selectedOption) =>
-                setSelectedCustomerId(selectedOption ? selectedOption.value : null)
+                setSelectedCustomerId(
+                  selectedOption ? selectedOption.value : null
+                )
               }
               isClearable
               placeholder="Select a customer..."
             />
-
           </div>
+          <div>          {selectedCustomerId && (
+  <div className="mb-4 p-3 bg-base-200 rounded border border-base-300">
+    <p className="text-sm font-semibold text-gray-700"></p>
+    <p className="text-lg"><span className=" font-bold ">Customer Name:</span>
+      {
+        customers.find((c) => c.customerId === selectedCustomerId)?.name
+      }
+    </p>
+    <p className=" text-gray-600"><span className=" font-bold ">Number:</span>
+      {
+        customers.find((c) => c.customerId === selectedCustomerId)?.phone
+      }
+    </p>
+    
+    
+  </div>
+            )}</div>
+          </div>
+
         </div>
-
-
 
         {/* Order Summary Table */}
         <table className="table table-xs w-full mb-4">
           <thead className="bg-base-200">
             <tr>
               <th>Name</th>
-              <th>Color</th>
+              <th>Variant</th>
               <th>Price</th>
-              <th>Ratio</th>
+              <th>Dimensions</th>
               <th>Qty</th>
               <th>Total</th>
               <th>Remove</th>
@@ -480,11 +598,151 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
             ) : (
               selectedItems.map((item) => (
                 <tr key={item.productId}>
-                  <td>{item.name.length > 20 ? item.name.slice(0, 20) + "..." : item.name}</td>
-                  <td>{item.color || "N/A"}</td>
-                  <td>{item.basePrice ? Number(item.basePrice).toFixed(2) : "N/A"}</td>
+                  <td>
+                    {item.name.length > 20
+                      ? item.name.slice(0, 20) + "..."
+                      : item.name}
+                  </td>
 
-                  <td>{item.ratio || "N/A"}</td>
+                  {/* --- Variant Selector and Display --- */}
+                  <td>
+                    {item.availableVariants &&
+                      item.availableVariants.length > 0 ? (
+                      <Select
+                        className="text-sm min-w-[120px]"
+                        options={item.availableVariants.map((variant) => ({
+                          value: variant.productVariantId,
+                          label:
+                            `Variant ${variant.productVariantId} ` +
+                            (variant.color ? `(${variant.color}) ` : "") +
+                            (variant.size ? `(${variant.size})` : ""),
+                        }))}
+                        value={
+                          item.productVariantId
+                            ? {
+                              value: item.productVariantId,
+                              label:
+                                `Variant ${item.productVariantId} ` +
+                                (item.selectedVariantDetails?.color
+                                  ? `(${item.selectedVariantDetails.color}) `
+                                  : "") +
+                                (item.selectedVariantDetails?.size
+                                  ? `(${item.selectedVariantDetails.size})`
+                                  : ""),
+                            }
+                            : null
+                        }
+                        onChange={(selectedOption) =>
+                          handleVariantChange(item.productId, selectedOption)
+                        }
+                        isClearable
+                        placeholder="Select Variant"
+                      />
+                    ) : (
+                      "N/A" // If no variants available for this product
+                    )}
+                  </td>
+                  {/* --- End Variant Selector --- */}
+
+                  {/* Price/Unit Input */}
+                  <td>
+                    <input
+                      type="number"
+                      value={
+                        item.customUnitPrice !== undefined &&
+                          item.customUnitPrice !== null
+                          ? item.customUnitPrice
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const newValue = Number(e.target.value);
+                        setSelectedItems((prev) =>
+                          prev.map((sItem) =>
+                            sItem.productId === item.productId
+                              ? {
+                                ...sItem,
+                                customUnitPrice: isNaN(newValue)
+                                  ? null
+                                  : newValue,
+                              }
+                              : sItem
+                          )
+                        );
+                      }}
+                      className="input input-bordered input-xs w-20 text-right"
+                      min="0"
+                      step="any"
+                    />
+                  </td>
+
+                  {/* Ratio/Dimensions Input */}
+                  <td>
+                    {item.pricingType === "square-feet" ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          placeholder="W"
+                          value={item.widthInch !== null ? item.widthInch : ""}
+                          onChange={(e) => {
+                            const newValue = Number(e.target.value);
+                            setSelectedItems((prev) =>
+                              prev.map((sItem) =>
+                                sItem.productId === item.productId
+                                  ? {
+                                    ...sItem,
+                                    widthInch: isNaN(newValue)
+                                      ? null
+                                      : newValue,
+                                  }
+                                  : sItem
+                              )
+                            );
+                          }}
+                          className="input input-bordered input-xs w-12 text-center"
+                          min="0"
+                        />
+                        <span>:</span>
+                        <input
+                          type="number"
+                          placeholder="H"
+                          value={
+                            item.heightInch !== null ? item.heightInch : ""
+                          }
+                          onChange={(e) => {
+                            const newValue = Number(e.target.value);
+                            setSelectedItems((prev) =>
+                              prev.map((sItem) =>
+                                sItem.productId === item.productId
+                                  ? {
+                                    ...sItem,
+                                    heightInch: isNaN(newValue)
+                                      ? null
+                                      : newValue,
+                                  }
+                                  : sItem
+                              )
+                            );
+                          }}
+                          className="input input-bordered input-xs w-12 text-center"
+                          min="0"
+                        />
+                        {item.widthInch > 0 && item.heightInch > 0 && (
+                          <span className="text-xs text-gray-500">
+                            (
+                            {(
+                              (item.widthInch / 12) *
+                              (item.heightInch / 12)
+                            ).toFixed(2)}{" "}
+                            sqft)
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      item.selectedVariantDetails?.ratio || "N/A" // Use selected variant's ratio if available, else N/A
+                    )}
+                  </td>
+
+                  {/* Quantity, Total, Remove buttons */}
                   <td className="flex items-center gap-2">
                     <button
                       onClick={() => decrementQuantity(item.productId)}
@@ -500,13 +758,7 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
                       +
                     </button>
                   </td>
-                  <td>
-                    {(item.basePrice && item.quantity)
-                      ? (Number(item.basePrice) * item.quantity).toFixed(2)
-                      : "N/A"}
-                  </td>
-
-
+                  <td>{calculateItemTotal(item).toFixed(2)} Tk</td>
                   <td>
                     <button
                       onClick={() => removeProduct(item.productId)}
@@ -536,7 +788,9 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
               Apply Coupon
             </button>
           </div>
-          {couponError && <p className="text-red-600 text-sm mb-2">{couponError}</p>}
+          {couponError && (
+            <p className="text-red-600 text-sm mb-2">{couponError}</p>
+          )}
           {couponDiscount > 0 && (
             <p className="text-green-600 text-sm mb-2">
               Coupon applied! Discount: {couponDiscount.toFixed(2)} USD
@@ -555,7 +809,9 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
             <span>{grossTotal.toFixed(2)} Tk</span>
           </div>
           <div className="flex justify-between">
-            <label className="font-bold" htmlFor="">Payment method</label>
+            <label className="font-bold" htmlFor="">
+              Payment method
+            </label>
             <select
               className="select select-bordered w-1/3"
               value={paymentMethod}
@@ -566,7 +822,9 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
             </select>
           </div>
           <div className="flex justify-between">
-            <label className="font-bold" htmlFor="">Delivery method</label>
+            <label className="font-bold" htmlFor="">
+              Delivery method
+            </label>
             <select
               className="select select-bordered w-1/3"
               value={deliveryMethod}
@@ -577,10 +835,12 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
             </select>
           </div>
           <div className="flex justify-between">
-            <label className="font-bold" htmlFor="">Payment Status</label>
+            <label className="font-bold" htmlFor="">
+              Payment Status
+            </label>
             <select
               className="select select-bordered w-1/3"
-              value={deliveryMethod}
+              value={paymentStatus}
               onChange={(e) => setPaymentStatus(e.target.value)}
             >
               <option value="pending">Pending</option>
@@ -589,49 +849,69 @@ console.log("staffIdToSend:", staffIdToSend, typeof staffIdToSend);
             </select>
           </div>
           {/* Courier Address Input */}
-{deliveryMethod === "courier" && (
-  <input
-    type="text"
-    placeholder="Enter courier address"
-    className="input input-bordered w-full mb-2"
-    value={courierAddressInput}
-    onChange={(e) => setCourierAddressInput(e.target.value)}
-  />
-)}
+          {deliveryMethod === "courier" && (
+            <input
+              type="text"
+              placeholder="Enter courier address"
+              className="input input-bordered w-full mb-2"
+              value={courierAddressInput}
+              onChange={(e) => setCourierAddressInput(e.target.value)}
+            />
+          )}
 
-{/* Notes Input */}
-<textarea
-  placeholder="Additional notes"
-  className="textarea textarea-bordered w-full mb-2"
-  value={notesInput}
-  onChange={(e) => setNotesInput(e.target.value)}
-/>
+          {/* Notes Input */}
+          <textarea
+            placeholder="Additional notes"
+            className="textarea textarea-bordered w-full mb-2"
+            value={notesInput}
+            onChange={(e) => setNotesInput(e.target.value)}
+          />
 
-
-
-{/* Courier Select Dropdown */}
-{deliveryMethod === "courier" && (
-  <select
-    className="select select-bordered w-full mb-2"
-    value={selectedCourierId || ""}
-    onChange={(e) => setSelectedCourierId(e.target.value ? Number(e.target.value) : null)}
-  >
-    <option value="">Select Courier</option>
-    {/* এখানে কুরিয়ার অপশন গুলো লুপ করে দেখাবে */}
-    {/* যেমন: <option value={1}>Courier 1</option> */}
-  </select>
-)}
-
-
+          {/* Courier Select Dropdown */}
+          {deliveryMethod === "courier" && (
+            <select
+              className="select select-bordered w-full mb-2"
+              value={selectedCourierId || ""}
+              onChange={(e) =>
+                setSelectedCourierId(
+                  e.target.value ? Number(e.target.value) : null
+                )
+              }
+            >
+              <option value="">Select Courier</option>
+              {couriers.map((courier) => (
+                <option key={courier.courierId} value={courier.courierId}>
+                  {courier.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="flex gap-2 mt-4">
-
-          <button className="btn btn-secondary w-full" onClick={handleSaveAndPrint}>
+          <button
+            className="btn btn-secondary w-full"
+            onClick={handleSaveAndPrint}
+          >
             Save & Print
           </button>
         </div>
       </div>
+
+      {/* InvoiceGenerator component rendered here (hidden by default) */}
+      {invoiceDataForGenerator && (
+        <InvoiceGenerator
+          orderData={invoiceDataForGenerator.orderData}
+          selectedCustomer={invoiceDataForGenerator.selectedCustomer}
+          selectedItems={invoiceDataForGenerator.selectedItems}
+          grossTotal={invoiceDataForGenerator.grossTotal}
+          couponDiscount={invoiceDataForGenerator.couponDiscount}
+          newOrderId={invoiceDataForGenerator.newOrderId}
+          products={invoiceDataForGenerator.products}
+          triggerGenerate={triggerInvoiceGenerate}
+          onGenerated={handleInvoiceGenerated}
+        />
+      )}
     </div>
   );
 };

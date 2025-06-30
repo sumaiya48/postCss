@@ -62,6 +62,7 @@ const menuItems = [
   { label: "FAQ", icon: <FaQuestionCircle />, path: "/faq" },
 ];
 
+
 export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
   const navigate = useNavigate();
   const [searchText, setSearchText] = useState("");
