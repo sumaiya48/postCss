@@ -8,7 +8,6 @@ import { FaCalendarAlt } from "react-icons/fa";
 import InvoiceGenerator from "./InvoiceGenerator";
 import POSLeftPanel from "./PosLeftPanel";
 
-
 const POSDashboard = () => {
   // 1. STATE DECLARATIONS
   const [products, setProducts] = useState([]);
@@ -59,8 +58,8 @@ const POSDashboard = () => {
     userRole === "admin"
       ? null
       : staffIdFromStorage !== null
-        ? Number(staffIdFromStorage)
-        : null;
+      ? Number(staffIdFromStorage)
+      : null;
 
   // --- Define calculateItemTotal here, within the component's scope ---
   const calculateItemTotal = useCallback((item) => {
@@ -150,11 +149,12 @@ const POSDashboard = () => {
   };
 
   const fetchCategories = async () => {
-    const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
-const all = res.data.data.categories || [];
-const topLevel = all.filter(cat => cat.parentCategoryId === null);
-setCategories(topLevel);
-
+    const res = await axios.get(
+      "https://test.api.dpmsign.com/api/product-category"
+    );
+    const all = res.data.data.categories || [];
+    const topLevel = all.filter((cat) => cat.parentCategoryId === null);
+    setCategories(topLevel);
   };
 
   // NEW: Fetch Couriers
@@ -214,8 +214,8 @@ setCategories(topLevel);
           const newVariantId = selectedOption ? selectedOption.value : null;
           const selectedVariant = newVariantId
             ? item.availableVariants.find(
-              (v) => v.productVariantId === newVariantId
-            )
+                (v) => v.productVariantId === newVariantId
+              )
             : null;
 
           let updatedUnitPrice = Number(item.basePrice || 0);
@@ -325,8 +325,8 @@ setCategories(topLevel);
       userRole === "admin"
         ? null
         : staffIdFromStorage !== null
-          ? Number(staffIdFromStorage)
-          : null;
+        ? Number(staffIdFromStorage)
+        : null;
 
     console.log("userData:", userData);
     console.log("userRole:", userRole);
@@ -380,8 +380,8 @@ setCategories(topLevel);
         courierId: selectedCourierId || null,
         courierAddress:
           deliveryMethod === "courier"
-            ? courierAddressInput?.trim() || "N/A"
-            : "N/A",
+            ? courierAddressInput?.trim() || null
+            : null,
         additionalNotes: notesInput || "",
         orderItems: selectedItems.map((item) => ({
           productId: item.productId,
@@ -469,16 +469,16 @@ setCategories(topLevel);
       {/* Left section */}
       <div className="col-span-5">
         <POSLeftPanel
-        products={products}
-        categories={categories}
-        filters={filters}
-        setFilters={setFilters}
-        selectedItems={selectedItems}
-        setSelectedItems={setSelectedItems}
-        searchText={searchText}
-        setSearchText={setSearchText}
-        calculateItemTotal={calculateItemTotal}
-      ></POSLeftPanel>
+          products={products}
+          categories={categories}
+          filters={filters}
+          setFilters={setFilters}
+          selectedItems={selectedItems}
+          setSelectedItems={setSelectedItems}
+          searchText={searchText}
+          setSearchText={setSearchText}
+          calculateItemTotal={calculateItemTotal}
+        ></POSLeftPanel>
       </div>
 
       {/* Right section */}
@@ -529,50 +529,55 @@ setCategories(topLevel);
 
           <div>
             <div className="flex items-center gap-2">
-            <FaUser className="text-gray-600" />
-            
-            <Select
-              className="w-64 text-sm"
-              options={customers.map((customer) => ({
-                value: customer.customerId,
-                label: `${customer.name} (${customer.phone})`,
-              }))}
-              value={
-                customers
-                  .map((c) => ({
-                    value: c.customerId,
-                    label: `${c.name} (${c.phone})`,
-                  }))
-                  .find((option) => option.value === selectedCustomerId) || null
-              }
-              onChange={(selectedOption) =>
-                setSelectedCustomerId(
-                  selectedOption ? selectedOption.value : null
-                )
-              }
-              isClearable
-              placeholder="Select a customer..."
-            />
-          </div>
-          <div>          {selectedCustomerId && (
-  <div className="mb-4 p-3 bg-base-200 rounded border border-base-300">
-    <p className="text-sm font-semibold text-gray-700"></p>
-    <p className="text-lg"><span className=" font-bold ">Customer Name:</span>
-      {
-        customers.find((c) => c.customerId === selectedCustomerId)?.name
-      }
-    </p>
-    <p className=" text-gray-600"><span className=" font-bold ">Number:</span>
-      {
-        customers.find((c) => c.customerId === selectedCustomerId)?.phone
-      }
-    </p>
-    
-    
-  </div>
-            )}</div>
-          </div>
+              <FaUser className="text-gray-600" />
 
+              <Select
+                className="w-64 text-sm"
+                options={customers.map((customer) => ({
+                  value: customer.customerId,
+                  label: `${customer.name} (${customer.phone})`,
+                }))}
+                value={
+                  customers
+                    .map((c) => ({
+                      value: c.customerId,
+                      label: `${c.name} (${c.phone})`,
+                    }))
+                    .find((option) => option.value === selectedCustomerId) ||
+                  null
+                }
+                onChange={(selectedOption) =>
+                  setSelectedCustomerId(
+                    selectedOption ? selectedOption.value : null
+                  )
+                }
+                isClearable
+                placeholder="Select a customer..."
+              />
+            </div>
+            <div>
+              {" "}
+              {selectedCustomerId && (
+                <div className="mb-4 p-3 bg-base-200 rounded border border-base-300">
+                  <p className="text-sm font-semibold text-gray-700"></p>
+                  <p className="text-lg">
+                    <span className=" font-bold ">Customer Name:</span>
+                    {
+                      customers.find((c) => c.customerId === selectedCustomerId)
+                        ?.name
+                    }
+                  </p>
+                  <p className=" text-gray-600">
+                    <span className=" font-bold ">Number:</span>
+                    {
+                      customers.find((c) => c.customerId === selectedCustomerId)
+                        ?.phone
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Order Summary Table */}
@@ -607,7 +612,7 @@ setCategories(topLevel);
                   {/* --- Variant Selector and Display --- */}
                   <td>
                     {item.availableVariants &&
-                      item.availableVariants.length > 0 ? (
+                    item.availableVariants.length > 0 ? (
                       <Select
                         className="text-sm min-w-[120px]"
                         options={item.availableVariants.map((variant) => ({
@@ -620,16 +625,16 @@ setCategories(topLevel);
                         value={
                           item.productVariantId
                             ? {
-                              value: item.productVariantId,
-                              label:
-                                `Variant ${item.productVariantId} ` +
-                                (item.selectedVariantDetails?.color
-                                  ? `(${item.selectedVariantDetails.color}) `
-                                  : "") +
-                                (item.selectedVariantDetails?.size
-                                  ? `(${item.selectedVariantDetails.size})`
-                                  : ""),
-                            }
+                                value: item.productVariantId,
+                                label:
+                                  `Variant ${item.productVariantId} ` +
+                                  (item.selectedVariantDetails?.color
+                                    ? `(${item.selectedVariantDetails.color}) `
+                                    : "") +
+                                  (item.selectedVariantDetails?.size
+                                    ? `(${item.selectedVariantDetails.size})`
+                                    : ""),
+                              }
                             : null
                         }
                         onChange={(selectedOption) =>
@@ -650,7 +655,7 @@ setCategories(topLevel);
                       type="number"
                       value={
                         item.customUnitPrice !== undefined &&
-                          item.customUnitPrice !== null
+                        item.customUnitPrice !== null
                           ? item.customUnitPrice
                           : ""
                       }
@@ -660,11 +665,11 @@ setCategories(topLevel);
                           prev.map((sItem) =>
                             sItem.productId === item.productId
                               ? {
-                                ...sItem,
-                                customUnitPrice: isNaN(newValue)
-                                  ? null
-                                  : newValue,
-                              }
+                                  ...sItem,
+                                  customUnitPrice: isNaN(newValue)
+                                    ? null
+                                    : newValue,
+                                }
                               : sItem
                           )
                         );
@@ -689,11 +694,11 @@ setCategories(topLevel);
                               prev.map((sItem) =>
                                 sItem.productId === item.productId
                                   ? {
-                                    ...sItem,
-                                    widthInch: isNaN(newValue)
-                                      ? null
-                                      : newValue,
-                                  }
+                                      ...sItem,
+                                      widthInch: isNaN(newValue)
+                                        ? null
+                                        : newValue,
+                                    }
                                   : sItem
                               )
                             );
@@ -714,11 +719,11 @@ setCategories(topLevel);
                               prev.map((sItem) =>
                                 sItem.productId === item.productId
                                   ? {
-                                    ...sItem,
-                                    heightInch: isNaN(newValue)
-                                      ? null
-                                      : newValue,
-                                  }
+                                      ...sItem,
+                                      heightInch: isNaN(newValue)
+                                        ? null
+                                        : newValue,
+                                    }
                                   : sItem
                               )
                             );

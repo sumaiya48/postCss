@@ -5,8 +5,7 @@ import axios from "axios";
 import Swal from "sweetalert2";
 
 const POSRightPanel = () => {
-  
-const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [filters, setFilters] = useState({ categoryId: null });
   const [selectedItems, setSelectedItems] = useState([]);
@@ -362,7 +361,7 @@ const [products, setProducts] = useState([]);
       const orderData = {
         customerId: Number(selectedCustomerId),
         customerName: selectedCustomer.name,
-        customerEmail: selectedCustomer.email || "",
+        customerEmail: selectedCustomer.email || null,
         customerPhone: selectedCustomer.phone,
         staffId: staffIdToSend,
         method: paymentMethod === "online-payment" ? "online" : "offline",
@@ -371,16 +370,17 @@ const [products, setProducts] = useState([]);
         paymentMethod,
         paymentStatus,
         deliveryMethod,
-        billingAddress: selectedCustomer.billingAddress || "N/A",
+        billingAddress: selectedCustomer.billingAddress || null,
         deliveryDate: formatDate(deliveryDate),
 
         couponId: couponIdToSend || null,
-        courierId: selectedCourierId || null,
+        courierId:
+          deliveryMethod === "courier" ? selectedCourierId || null : null,
         courierAddress:
-  deliveryMethod === "courier"
-    ? courierAddressInput?.trim() || "N/A"
-    : "N/A",
-        additionalNotes: notesInput || "",
+          deliveryMethod === "courier"
+            ? courierAddressInput?.trim() || null // If courier, send trimmed input or null if empty
+            : null,
+        additionalNotes: notesInput || null,
         orderItems: selectedItems.map((item) => ({
           productId: item.productId,
           productVariantId: item.productVariantId
@@ -395,7 +395,19 @@ const [products, setProducts] = useState([]);
           price: Number(item.customUnitPrice),
         })),
       };
-      console.log("Order Data being sent:", orderData);
+      console.log("--- Frontend Debugging Output ---");
+      console.log("Order Data being sent:", JSON.stringify(orderData, null, 2)); // Stringify for clearer view
+      console.log(
+        "Type of orderData.courierAddress:",
+        typeof orderData.courierAddress
+      );
+      console.log(
+        "Value of orderData.courierAddress:",
+        orderData.courierAddress
+      );
+      // console.log("Type of orderData.courierId:", typeof orderData.courierId);
+      // console.log("Value of orderData.courierId:", orderData.courierId);
+      // console.log("---------------------------------");
 
       const res = await axios.post(
         "https://test.api.dpmsign.com/api/order/create", // FULL URL
@@ -467,10 +479,13 @@ const [products, setProducts] = useState([]);
       <div className="flex justify-between items-center mb-2 gap-6">
         <div className="text-sm">
           <p className="font-bold mb-2">
-            Order No: <span>{nextOrderId ? `#ORD-${nextOrderId}` : "Loading..."}</span>
+            Order No:{" "}
+            <span>{nextOrderId ? `#ORD-${nextOrderId}` : "Loading..."}</span>
           </p>
           <div className="mb-2 flex items-center gap-1">
-            <label htmlFor="orderDate" className="font-semibold text-xs">Date:</label>
+            <label htmlFor="orderDate" className="font-semibold text-xs">
+              Date:
+            </label>
             <input
               type="date"
               id="orderDate"
@@ -480,7 +495,9 @@ const [products, setProducts] = useState([]);
             />
           </div>
           <div className="mb-2 flex items-center gap-1">
-            <label htmlFor="deliveryDate" className="font-semibold text-xs">Delivery Date:</label>
+            <label htmlFor="deliveryDate" className="font-semibold text-xs">
+              Delivery Date:
+            </label>
             <input
               type="date"
               id="deliveryDate"
@@ -499,10 +516,17 @@ const [products, setProducts] = useState([]);
               value: c.customerId,
               label: `${c.name} (${c.phone})`,
             }))}
-            value={customers
-              .map((c) => ({ value: c.customerId, label: `${c.name} (${c.phone})` }))
-              .find((o) => o.value === selectedCustomerId) || null}
-            onChange={(option) => setSelectedCustomerId(option ? option.value : null)}
+            value={
+              customers
+                .map((c) => ({
+                  value: c.customerId,
+                  label: `${c.name} (${c.phone})`,
+                }))
+                .find((o) => o.value === selectedCustomerId) || null
+            }
+            onChange={(option) =>
+              setSelectedCustomerId(option ? option.value : null)
+            }
             isClearable
             placeholder="Select a customer..."
           />
@@ -532,24 +556,40 @@ const [products, setProducts] = useState([]);
           ) : (
             selectedItems.map((item) => (
               <tr key={item.productId}>
-                <td>{item.name.length > 20 ? item.name.slice(0, 20) + "..." : item.name}</td>
+                <td>
+                  {item.name.length > 20
+                    ? item.name.slice(0, 20) + "..."
+                    : item.name}
+                </td>
                 <td>
                   {item.availableVariants?.length > 0 ? (
                     <Select
                       className="text-sm min-w-[120px]"
                       options={item.availableVariants.map((v) => ({
                         value: v.productVariantId,
-                        label: `Variant ${v.productVariantId}${v.color ? ` (${v.color})` : ""}${v.size ? ` (${v.size})` : ""}`,
+                        label: `Variant ${v.productVariantId}${
+                          v.color ? ` (${v.color})` : ""
+                        }${v.size ? ` (${v.size})` : ""}`,
                       }))}
                       value={
                         item.productVariantId
                           ? {
                               value: item.productVariantId,
-                              label: `Variant ${item.productVariantId}${item.selectedVariantDetails?.color ? ` (${item.selectedVariantDetails.color})` : ""}${item.selectedVariantDetails?.size ? ` (${item.selectedVariantDetails.size})` : ""}`,
+                              label: `Variant ${item.productVariantId}${
+                                item.selectedVariantDetails?.color
+                                  ? ` (${item.selectedVariantDetails.color})`
+                                  : ""
+                              }${
+                                item.selectedVariantDetails?.size
+                                  ? ` (${item.selectedVariantDetails.size})`
+                                  : ""
+                              }`,
                             }
                           : null
                       }
-                      onChange={(option) => handleVariantChange(item.productId, option)}
+                      onChange={(option) =>
+                        handleVariantChange(item.productId, option)
+                      }
                       isClearable
                       placeholder="Select Variant"
                     />
@@ -567,7 +607,10 @@ const [products, setProducts] = useState([]);
                       setSelectedItems((prev) =>
                         prev.map((s) =>
                           s.productId === item.productId
-                            ? { ...s, customUnitPrice: isNaN(newVal) ? null : newVal }
+                            ? {
+                                ...s,
+                                customUnitPrice: isNaN(newVal) ? null : newVal,
+                              }
                             : s
                         )
                       );
@@ -586,7 +629,12 @@ const [products, setProducts] = useState([]);
                           const newVal = Number(e.target.value);
                           setSelectedItems((prev) =>
                             prev.map((s) =>
-                              s.productId === item.productId ? { ...s, widthInch: isNaN(newVal) ? null : newVal } : s
+                              s.productId === item.productId
+                                ? {
+                                    ...s,
+                                    widthInch: isNaN(newVal) ? null : newVal,
+                                  }
+                                : s
                             )
                           );
                         }}
@@ -601,14 +649,24 @@ const [products, setProducts] = useState([]);
                           const newVal = Number(e.target.value);
                           setSelectedItems((prev) =>
                             prev.map((s) =>
-                              s.productId === item.productId ? { ...s, heightInch: isNaN(newVal) ? null : newVal } : s
+                              s.productId === item.productId
+                                ? {
+                                    ...s,
+                                    heightInch: isNaN(newVal) ? null : newVal,
+                                  }
+                                : s
                             )
                           );
                         }}
                       />
                       {item.widthInch > 0 && item.heightInch > 0 && (
                         <span className="text-xs text-gray-500">
-                          ({((item.widthInch / 12) * (item.heightInch / 12)).toFixed(2)} sqft)
+                          (
+                          {(
+                            (item.widthInch / 12) *
+                            (item.heightInch / 12)
+                          ).toFixed(2)}{" "}
+                          sqft)
                         </span>
                       )}
                     </div>
@@ -617,9 +675,19 @@ const [products, setProducts] = useState([]);
                   )}
                 </td>
                 <td className="flex gap-2">
-                  <button onClick={() => decrementQuantity(item.productId)} className="btn btn-xs btn-outline">-</button>
+                  <button
+                    onClick={() => decrementQuantity(item.productId)}
+                    className="btn btn-xs btn-outline"
+                  >
+                    -
+                  </button>
                   <span>{item.quantity}</span>
-                  <button onClick={() => incrementQuantity(item.productId)} className="btn btn-xs btn-outline">+</button>
+                  <button
+                    onClick={() => incrementQuantity(item.productId)}
+                    className="btn btn-xs btn-outline"
+                  >
+                    +
+                  </button>
                 </td>
                 <td>{calculateItemTotal(item).toFixed(2)} Tk</td>
                 <td>
@@ -646,9 +714,13 @@ const [products, setProducts] = useState([]);
             value={couponCode}
             onChange={(e) => setCouponCode(e.target.value)}
           />
-          <button onClick={applyCoupon} className="btn btn-primary btn-sm">Apply Coupon</button>
+          <button onClick={applyCoupon} className="btn btn-primary btn-sm">
+            Apply Coupon
+          </button>
         </div>
-        {couponError && <p className="text-red-600 text-sm mb-2">{couponError}</p>}
+        {couponError && (
+          <p className="text-red-600 text-sm mb-2">{couponError}</p>
+        )}
         {couponDiscount > 0 && (
           <p className="text-green-600 text-sm mb-2">
             Coupon applied! Discount: {couponDiscount.toFixed(2)} USD
@@ -713,7 +785,9 @@ const [products, setProducts] = useState([]);
               className="select select-bordered w-full mb-2"
               value={selectedCourierId || ""}
               onChange={(e) =>
-                setSelectedCourierId(e.target.value ? Number(e.target.value) : null)
+                setSelectedCourierId(
+                  e.target.value ? Number(e.target.value) : null
+                )
               }
             >
               <option value="">Select Courier</option>
