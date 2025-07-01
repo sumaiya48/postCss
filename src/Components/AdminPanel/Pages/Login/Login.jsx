@@ -21,36 +21,61 @@ export default function Login() {
     try {
       // Make a POST request to your backend's login endpoint
       const response = await axios.post(
-        "https://test.api.dpmsign.com/api/auth/login",
+        "https://test.api.dpmsign.com/api/auth/login", // Corrected back to /api/auth/login
         {
           email: email,
           password: password,
         }
       );
 
-      // **IMPORTANT**: Assuming your backend returns a token in the response data
-      // like { success: true, token: "your_jwt_token" }
+      // **IMPORTANT**: Assuming your backend returns a token in response.data.data.authToken
       const authToken = response.data.data.authToken;
 
+      // Determine the correct user data object based on backend response
+      // This logic correctly handles if the backend sends 'admin' or 'staff'
+      let userDataToStore = null;
+      if (response.data.data.admin) {
+        userDataToStore = response.data.data.admin;
+      } else if (response.data.data.staff) {
+        userDataToStore = response.data.data.staff;
+      }
+      // If your backend uses a generic 'user' key for both, you can add it here too:
+      // else if (response.data.data.user) {
+      //   userDataToStore = response.data.data.user;
+      // }
 
-      
-      if (authToken) {
+      // --- DEBUGGING LOG ---
+      // console.log("authToken received:", authToken);
+      // console.log("userDataToStore before stringify:", userDataToStore);
+      // --- END DEBUGGING LOG ---
+
+      if (authToken && userDataToStore) {
         // Save the token to local storage
         localStorage.setItem("authToken", authToken);
-        localStorage.setItem("userData", JSON.stringify(response.data.data.user));
+        // Save the user data (admin or staff) to local storage as a JSON string
+        localStorage.setItem("userData", JSON.stringify(userDataToStore));
 
         // Navigate to the dashboard after successful login
         navigate("/dashboard");
       } else {
-        setError("Login failed. Please try again.");
+        // If authToken or userDataToStore is missing, it's a login failure
+        setError(
+          "Login failed: Missing authentication token or user data in response."
+        );
+        console.error(
+          "Backend response data structure issue:",
+          response.data.data
+        );
       }
     } catch (err) {
       // Handle errors from the API call
-      if (err.response && err.response.status === 401) {
-        // 401 Unauthorized is a common error for bad credentials
-        setError("Invalid email or password.");
+      if (err.response) {
+        // If the server responded with an error (e.g., 401, 400, 404)
+        setError(
+          err.response.data.message || "Login failed. Please try again."
+        );
       } else {
-        // Handle other errors (e.g., server is down)
+        // Handle network errors or other unexpected issues
         setError("An unexpected error occurred. Please try again later.");
         console.error("Login error:", err);
       }
