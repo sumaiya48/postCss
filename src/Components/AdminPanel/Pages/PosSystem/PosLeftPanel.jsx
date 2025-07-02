@@ -1,7 +1,8 @@
-// POSLeftPanel.jsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
+import axios from "axios";
+import Swal from "sweetalert2";
 
 const customSelectStyles = {
   control: (base) => ({
@@ -20,41 +21,84 @@ const customSelectStyles = {
   }),
   menu: (base) => ({
     ...base,
-    zIndex: 9999, // menu যাতে অন্য কিছুর নিচে না পড়ে
+    zIndex: 9999,
   }),
   menuList: (base) => ({
     ...base,
-    maxHeight: 2000, // এখানেই dropdown height কন্ট্রোল হয়
+    maxHeight: 2000,
     overflowY: "auto",
   }),
 };
 
 export default function POSLeftPanel({
   products,
-  categories,
   filters,
   setFilters,
   setSelectedItems,
   searchText,
   setSearchText,
 }) {
+  const navigate = useNavigate();
+
+  const [allFetchedCategories, setAllFetchedCategories] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+
+  useEffect(() => {
+    const fetchAllCategories = async () => {
+      try {
+        const res = await axios.get(
+          "https://test.api.dpmsign.com/api/product-category"
+        );
+        const all = res.data.data.categories;
+        setAllFetchedCategories(all);
+
+        const topLevel = all.filter((cat) => cat.parentCategoryId === null);
+        setCategories(topLevel);
+
+        // If already selected category, update its subcategories
+        if (filters.categoryId) {
+          const selected = all.find((cat) => cat.categoryId === filters.categoryId);
+          setSubCategories(selected?.subCategories || []);
+        }
+      } catch (err) {
+        console.error("Error fetching categories:", err);
+        Swal.fire("Error", "Could not load categories.", "error");
+      }
+    };
+    fetchAllCategories();
+  }, []);
+
+  const handleCategoryChange = (selectedOption) => {
+    const categoryId = selectedOption ? selectedOption.value : null;
+    const selected = allFetchedCategories.find((cat) => cat.categoryId === categoryId);
+    setFilters({
+      categoryId,
+      subCategoryId: null,
+    });
+    setSubCategories(selected?.subCategories || []);
+  };
+
+  const handleSubCategoryChange = (selectedOption) => {
+    const subCategoryId = selectedOption ? selectedOption.value : null;
+    setFilters((prev) => ({
+      ...prev,
+      subCategoryId,
+    }));
+  };
+
   const handleProductClick = (product) => {
     setSelectedItems((prev) => {
       const existingItemIndex = prev.findIndex(
         (item) => item.productId === product.productId
       );
-
       if (existingItemIndex !== -1) {
         const updated = [...prev];
-        updated[existingItemIndex] = {
-          ...updated[existingItemIndex],
-          quantity: updated[existingItemIndex].quantity + 1,
-        };
+        updated[existingItemIndex].quantity += 1;
         return updated;
       } else {
         const initialQuantity = 1;
         const initialUnitPrice = Number(product.basePrice || 0);
-
         return [
           ...prev,
           {
@@ -74,8 +118,7 @@ export default function POSLeftPanel({
   };
 
   const getImageUrl = (product) => {
-    if (!product.images || product.images.length === 0)
-      return "/placeholder.png";
+    if (!product.images || product.images.length === 0) return "/placeholder.png";
     const imgName = product.images[0].imageName;
     if (!imgName || typeof imgName !== "string") return "/placeholder.png";
     return `https://test.api.dpmsign.com/static/product-images/${imgName}`;
@@ -85,19 +128,22 @@ export default function POSLeftPanel({
     const matchSearch = product.name
       .toLowerCase()
       .includes(searchText.toLowerCase());
+
     const matchCategory =
       !filters.categoryId || product.categoryId === filters.categoryId;
 
-    return matchSearch && matchCategory;
+    const matchSubCategory =
+      !filters.subCategoryId || product.categoryId === filters.subCategoryId;
+
+    return matchSearch && matchCategory && matchSubCategory;
   });
 
-  const navigate = useNavigate();
   return (
     <div className="col-span-7 bg-gray-100 border-r p-4 overflow-y-auto">
       <div className="flex items-center gap-2 mb-4">
         <button
           className="btn btn-sm btn-primary"
-          onClick={() => navigate(-1)} // আগের পেজে ফেরত নেয়
+          onClick={() => navigate(-1)}
         >
           Go Back
         </button>
@@ -111,7 +157,7 @@ export default function POSLeftPanel({
         />
       </div>
 
-      <div className="mb-4 h-full ">
+      <div className="mb-4">
         <label className="block text-sm font-semibold mb-1">
           Filter by Category:
         </label>
@@ -129,23 +175,53 @@ export default function POSLeftPanel({
               ? {
                   value: filters.categoryId,
                   label:
-                    categories.find((c) => c.categoryId === filters.categoryId)
-                      ?.name || "Unknown",
+                    categories.find(
+                      (c) => c.categoryId === filters.categoryId
+                    )?.name || "Unknown",
                 }
               : { value: null, label: "All Categories" }
           }
-          onChange={(selectedOption) =>
-            setFilters((prev) => ({
-              ...prev,
-              categoryId: selectedOption ? selectedOption.value : null,
-            }))
-          }
+          onChange={handleCategoryChange}
           isClearable={false}
           placeholder="Select category"
-          menuPortalTarget={document.body} // render menu in body
-          menuPosition="fixed" // prevent it being cut off
+          menuPortalTarget={document.body}
+          menuPosition="fixed"
         />
       </div>
+
+      {subCategories.length > 0 && (
+        <div className="mb-4">
+          <label className="block text-sm font-semibold mb-1">
+            Filter by Sub-Category:
+          </label>
+          <Select
+            styles={customSelectStyles}
+            options={[
+              { value: null, label: "All Subcategories" },
+              ...subCategories.map((sub) => ({
+                value: sub.categoryId,
+                label: sub.name,
+              })),
+            ]}
+            value={
+              filters.subCategoryId
+                ? {
+                    value: filters.subCategoryId,
+                    label:
+                      subCategories.find(
+                        (s) => s.categoryId === filters.subCategoryId
+                      )?.name || "Unknown",
+                  }
+                : { value: null, label: "All Subcategories" }
+            }
+            onChange={handleSubCategoryChange}
+            isClearable={false}
+            placeholder="Select sub-category"
+            menuPortalTarget={document.body}
+            menuPosition="fixed"
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-4 mt-10">
         {filteredProducts.map((product) => (

@@ -36,7 +36,45 @@ export default function POSDashboard() {
   const [triggerInvoiceGenerate, setTriggerInvoiceGenerate] = useState(false);
   const [invoiceData, setInvoiceData] = useState(null);
 
-  const userData = JSON.parse(localStorage.getItem("userData") || "null");
+
+  // নতুন: select করা customer এর object খুঁজে নিচ্ছি
+  const selectedCustomer = customers.find(
+    (c) => c.customerId === Number(selectedCustomerId)
+  );
+
+
+  // নতুন function, selected customer unselect করার জন্য
+  const handleUnselectCustomer = () => {
+    setSelectedCustomerId(null);
+  };
+
+
+
+
+
+  // POSDashboard.jsx
+const [openCustomerModal, setOpenCustomerModal] = useState(false);
+
+const handleOpenCustomerModal = () => {
+  setOpenCustomerModal(false); // 👈 প্রথমে false করে reset করি
+  setTimeout(() => {
+    setOpenCustomerModal(true); // 👈 তারপর আবার true করে trigger দিই
+  }, 50);
+};
+
+
+
+ let userData = null;
+try {
+  const raw = localStorage.getItem("userData");
+  if (raw && raw !== "undefined") {
+    userData = JSON.parse(raw);
+  }
+} catch (e) {
+  console.error("Invalid userData in localStorage:", e);
+  localStorage.removeItem("userData"); // future protection
+}
+
   const staffIdToSend =
     userData?.role !== "admin" ? Number(userData?.staffId) : null;
 
@@ -277,11 +315,42 @@ export default function POSDashboard() {
       <div className="col-span-7 p-4 flex flex-col">
         <p className="text-sm font-bold mb-2">Order No: #{nextOrderId}</p>
 
+        {/* Customer Info Display with unselect button */}
+        {selectedCustomer ? (
+          <div className="flex items-center justify-between bg-gray-100 p-3 rounded mb-3 shadow">
+            <div>
+              <p><strong>Name:</strong> {selectedCustomer.name}</p>
+              <p><strong>Number:</strong> {selectedCustomer.phone}</p>
+            </div>
+            <button
+              onClick={handleUnselectCustomer}
+              className="btn btn-sm btn-outline"
+              title="Unselect Customer"
+            >
+              ❌ Clear
+            </button>
+          </div>
+        ) : (
+          <p className="mb-3 italic text-gray-500">No customer selected</p>
+        )}
+
+        <div className="flex justify-end mb-3">
+          <button
+            onClick={handleOpenCustomerModal}
+            className="btn btn-outline"
+          >
+            ➕ Add Customer
+          </button>
+        </div>
+
         <CustomerSelector
           customers={customers}
           selectedCustomerId={selectedCustomerId}
           setSelectedCustomerId={setSelectedCustomerId}
-          refreshCustomers={fetchCustomers}
+          refreshCustomers={() => {
+            fetchCustomers();
+          }}
+          triggerModalOpen={openCustomerModal}
         />
 
         <OrderSummary
@@ -294,14 +363,14 @@ export default function POSDashboard() {
           calculateItemTotal={calculateItemTotal}
         />
 
-        <CouponInput
+        {/* <CouponInput
           couponCode={couponCode}
           setCouponCode={setCouponCode}
           applyCoupon={applyCoupon}
           couponError={couponError}
           couponDiscount={couponDiscount}
-        />
-
+        /> */}
+<hr />
         <OrderTotals
           subTotal={subTotal}
           couponDiscount={couponDiscount}

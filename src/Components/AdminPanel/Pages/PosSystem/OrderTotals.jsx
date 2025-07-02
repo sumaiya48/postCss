@@ -13,6 +13,7 @@ export default function OrderTotals({
   setPaymentStatus,
   couriers,
   selectedCourierId,
+  setSelectedCourierId,
   courierAddressInput,
   setCourierAddressInput,
   notesInput, // Add notesInput here
