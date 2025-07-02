@@ -3,7 +3,6 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 
-
 const customSelectStyles = {
   control: (base) => ({
     ...base,
@@ -19,7 +18,7 @@ const customSelectStyles = {
     ...base,
     height: 40,
   }),
-    menu: (base) => ({
+  menu: (base) => ({
     ...base,
     zIndex: 9999, // menu যাতে অন্য কিছুর নিচে না পড়ে
   }),
@@ -38,11 +37,7 @@ export default function POSLeftPanel({
   setSelectedItems,
   searchText,
   setSearchText,
-}) 
-
-
-
-{
+}) {
   const handleProductClick = (product) => {
     setSelectedItems((prev) => {
       const existingItemIndex = prev.findIndex(
@@ -86,24 +81,26 @@ export default function POSLeftPanel({
     return `https://test.api.dpmsign.com/static/product-images/${imgName}`;
   };
 
-const filteredProducts = products.filter((product) => {
-  const matchSearch = product.name.toLowerCase().includes(searchText.toLowerCase());
-  const matchCategory =
-    !filters.categoryId || product.categoryId === filters.categoryId;
+  const filteredProducts = products.filter((product) => {
+    const matchSearch = product.name
+      .toLowerCase()
+      .includes(searchText.toLowerCase());
+    const matchCategory =
+      !filters.categoryId || product.categoryId === filters.categoryId;
 
-  return matchSearch && matchCategory;
-});
+    return matchSearch && matchCategory;
+  });
 
-const navigate = useNavigate();
+  const navigate = useNavigate();
   return (
     <div className="col-span-7 bg-gray-100 border-r p-4 overflow-y-auto">
       <div className="flex items-center gap-2 mb-4">
         <button
-  className="btn btn-sm btn-primary"
-  onClick={() => navigate(-1)} // আগের পেজে ফেরত নেয়
->
-  Go Back
-</button>
+          className="btn btn-sm btn-primary"
+          onClick={() => navigate(-1)} // আগের পেজে ফেরত নেয়
+        >
+          Go Back
+        </button>
 
         <input
           type="text"
@@ -118,37 +115,36 @@ const navigate = useNavigate();
         <label className="block text-sm font-semibold mb-1">
           Filter by Category:
         </label>
-     <Select
-  styles={customSelectStyles}
-  options={[
-    { value: null, label: "All Categories" },
-    ...categories.map((cat) => ({
-      value: cat.categoryId,
-      label: cat.name,
-    })),
-  ]}
-  value={
-    filters.categoryId
-      ? {
-          value: filters.categoryId,
-          label:
-            categories.find((c) => c.categoryId === filters.categoryId)
-              ?.name || "Unknown",
-        }
-      : { value: null, label: "All Categories" }
-  }
-  onChange={(selectedOption) =>
-    setFilters((prev) => ({
-      ...prev,
-      categoryId: selectedOption ? selectedOption.value : null,
-    }))
-  }
-  isClearable={false}
-  placeholder="Select category"
-  menuPortalTarget={document.body} // render menu in body
-  menuPosition="fixed"             // prevent it being cut off
-/>
-
+        <Select
+          styles={customSelectStyles}
+          options={[
+            { value: null, label: "All Categories" },
+            ...categories.map((cat) => ({
+              value: cat.categoryId,
+              label: cat.name,
+            })),
+          ]}
+          value={
+            filters.categoryId
+              ? {
+                  value: filters.categoryId,
+                  label:
+                    categories.find((c) => c.categoryId === filters.categoryId)
+                      ?.name || "Unknown",
+                }
+              : { value: null, label: "All Categories" }
+          }
+          onChange={(selectedOption) =>
+            setFilters((prev) => ({
+              ...prev,
+              categoryId: selectedOption ? selectedOption.value : null,
+            }))
+          }
+          isClearable={false}
+          placeholder="Select category"
+          menuPortalTarget={document.body} // render menu in body
+          menuPosition="fixed" // prevent it being cut off
+        />
       </div>
 
       <div className="grid grid-cols-4 gap-4 mt-10">

@@ -76,9 +76,14 @@ const router = createBrowserRouter([
           { path: "products/categories", element: <Categories></Categories> },
           { path: "products/add", element: <AddProduct></AddProduct> },
           { path: "products/review", element: <ProductReview></ProductReview> },
-          { path: "products/product-details/:productId", element: <ViewProductDetails /> },
-          { path: "products/product-update/:productId", element: <UpdateProduct></UpdateProduct> },
-
+          {
+            path: "products/product-details/:productId",
+            element: <ViewProductDetails />,
+          },
+          {
+            path: "products/product-update/:productId",
+            element: <UpdateProduct></UpdateProduct>,
+          },
 
           { path: "coupons", element: <Coupons></Coupons> },
           { path: "media", element: <Media></Media> },
@@ -93,9 +98,9 @@ const router = createBrowserRouter([
           { path: "faq", element: <FAQ></FAQ> },
           { path: "/create-job", element: <CreateJob></CreateJob> },
           { path: "/edit-job/:jobId", element: <EditJob></EditJob> },
-          { path: "/add-blog", element:<AddBlog></AddBlog>  },
-          { path: "/edit-blog/:blogId", element: <EditBlog></EditBlog>},
-          { path: "/profile", element: <Profile></Profile>},
+          { path: "/add-blog", element: <AddBlog></AddBlog> },
+          { path: "/edit-blog/:blogId", element: <EditBlog></EditBlog> },
+          { path: "/profile", element: <Profile></Profile> },
         ],
       },
     ],
