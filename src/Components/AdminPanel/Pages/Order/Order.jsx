@@ -7,6 +7,7 @@ import {
   FaStickyNote, FaCreditCard, FaMoneyBill, FaTruck,
   FaCalendarAlt, FaClipboardList
 } from "react-icons/fa";
+import InvoiceDownloadButton from "./InvoiceDownloadButton";
 
 const getToken = () => localStorage.getItem("authToken");
 
@@ -56,6 +57,14 @@ export default function Order() {
   const [sortField, setSortField] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState("desc");
   const [selectedOrder, setSelectedOrder] = useState(null);
+const [currentPage, setCurrentPage] = useState(1);
+const [ordersPerPage] = useState(10); // প্রতি পেজে কতগুলো অর্ডার দেখাবে
+
+
+const indexOfLastOrder = currentPage * ordersPerPage;
+const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
+const currentOrders = orders.slice(indexOfFirstOrder, indexOfLastOrder);
+
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -202,10 +211,11 @@ export default function Order() {
                 <th>Est. Delivery</th>
                 <th>Order Status</th>
                 <th>Details</th>
+                <th>Download</th>
               </tr>
             </thead>
             <tbody>
-              {orders.map((order, i) => (
+              {currentOrders.map((order, i) => (
                 <tr key={order.orderId || i} className="hover">
                   <td><input type="checkbox" className="checkbox checkbox-xs" /></td>
                   <td>{order.orderId}</td>
@@ -227,6 +237,9 @@ export default function Order() {
                       View
                     </button>
                   </td>
+                   <td>
+        <InvoiceDownloadButton order={order} />
+      </td>
                 </tr>
               ))}
             </tbody>
@@ -343,6 +356,17 @@ export default function Order() {
     </div>
   </dialog>
 )}
+<div className="flex justify-center mt-4 space-x-2">
+  {Array.from({ length: Math.ceil(orders.length / ordersPerPage) }, (_, i) => (
+    <button
+      key={i + 1}
+      onClick={() => setCurrentPage(i + 1)}
+      className={`btn btn-sm ${currentPage === i + 1 ? "btn-primary" : "btn-outline"}`}
+    >
+      {i + 1}
+    </button>
+  ))}
+</div>
 
 
     </div>

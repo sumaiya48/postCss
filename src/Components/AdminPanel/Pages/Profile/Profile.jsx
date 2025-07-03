@@ -1,198 +1,153 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios"; // Import axios for API calls
+import React, { useEffect, useState, useCallback } from "react";
+import axios from "axios";
+import AdminUpdateForm from "./AdminUpdateForm";
+import StaffList from "./StaffList";
 
 export default function Profile() {
   const [profileData, setProfileData] = useState(null);
+  const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
 
-  // Base URL for your API
-  const API_BASE_URL = "https://test.api.dpmsign.com/api"; // IMPORTANT: Ensure this matches your actual API base URL
+  const API_BASE_URL = "https://test.api.dpmsign.com/api";
+
+  const savedAuthToken = localStorage.getItem("authToken");
+  const savedUserData = localStorage.getItem("userData");
+
+  // useCallback দিয়ে fetchData বানানো - যেটা রিফ্রেশে ব্যবহার করা যাবে
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    if (!savedAuthToken || !savedUserData || savedUserData === "undefined") {
+      setError("User not logged in.");
+      setLoading(false);
+      return;
+    }
+
+    let parsedUser;
+    try {
+      parsedUser = JSON.parse(savedUserData);
+    } catch (err) {
+      setError("Corrupted user data. Please re-login.");
+      localStorage.removeItem("userData");
+      setLoading(false);
+      return;
+    }
+
+    const { role } = parsedUser;
+
+    try {
+      if (role === "admin") {
+        // Get admin profile
+        const res = await axios.get(`${API_BASE_URL}/admin`, {
+          headers: { Authorization: `Bearer ${savedAuthToken}` },
+        });
+
+        let fetched = res.data.data;
+        if (Array.isArray(fetched)) {
+          fetched = fetched.find((admin) => admin.email === parsedUser.email);
+        }
+
+        setProfileData(fetched || null);
+      }
+
+      if (role === "agent" || role === "designer") {
+        setProfileData(null);
+      }
+
+      // Get staff list for all
+      const staffRes = await axios.get(`${API_BASE_URL}/staff`, {
+        headers: { Authorization: `Bearer ${savedAuthToken}` },
+      });
+
+      setStaffList(staffRes.data.data.staff || []);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
+  }, [savedAuthToken, savedUserData]);
 
   useEffect(() => {
-    const fetchProfileData = async () => {
-      setLoading(true);
-      setError(null);
-      const savedAuthToken = localStorage.getItem("authToken");
-      const savedUserData = localStorage.getItem("userData");
+    fetchData();
+  }, [fetchData]);
 
-      if (
-        !savedAuthToken ||
-        !savedUserData ||
-        savedUserData === "undefined" ||
-        savedUserData === ""
-      ) {
-        setLoading(false);
-        setError("User not logged in or authentication data is missing.");
-        return;
-      }
-
-      let parsedUserData;
-      try {
-        parsedUserData = JSON.parse(savedUserData);
-      } catch (err) {
-        setLoading(false);
-        setError(
-          "Corrupted user data in local storage. Please clear local storage and try again."
-        );
-        console.error("Invalid JSON in userData:", err);
-        return;
-      }
-
-      const { role } = parsedUserData; // Get the role from initial stored data
-
-      try {
-        let response;
-        if (role === "admin") {
-          // Admin can get their own info from /api/admin
-          response = await axios.get(`${API_BASE_URL}/admin`, {
-            headers: {
-              Authorization: `Bearer ${savedAuthToken}`,
-            },
-          });
-
-          // --- DEBUGGING LOG ---
-          console.log("Admin API Response Data:", response.data);
-          // --- END DEBUGGING LOG ---
-
-          // Backend /api/admin might return an array of admins, or just the single authenticated admin.
-          // We need to handle both cases.
-          let fetchedAdminData = null;
-          if (Array.isArray(response.data.data)) {
-            // If it's an array, find the specific admin by email (or adminId)
-            fetchedAdminData = response.data.data.find(
-              (admin) => admin.email === parsedUserData.email
-            );
-          } else if (response.data.data) {
-            // If it's a single object, assume it's the current admin's data
-            fetchedAdminData = response.data.data;
-          }
-
-          if (fetchedAdminData) {
-            setProfileData(fetchedAdminData);
-          } else {
-            setError("Admin profile not found in the response.");
-          }
-        } else if (role === "agent" || role === "designer") {
-          // Staff can get their own info from /api/staff/me
-          response = await axios.get(`${API_BASE_URL}/staff/me`, {
-            headers: {
-              Authorization: `Bearer ${savedAuthToken}`,
-            },
-          });
-
-          // --- DEBUGGING LOG ---
-          console.log("Staff API Response Data:", response.data);
-          // --- END DEBUGGING LOG ---
-
-          setProfileData(response.data.data); // Set the staff's own data
-        } else {
-          setError("Unknown user role. Cannot fetch profile.");
-        }
-      } catch (err) {
-        console.error("Error fetching profile data:", err);
-        if (err.response) {
-          // Log the full error response from the server for more details
-          console.error("API Error Response:", err.response);
-          setError(
-            `Error fetching profile: ${
-              err.response.data.message || "Failed to fetch data"
-            }`
-          );
-        } else {
-          setError(
-            "Network error or server unavailable. Please check your internet connection or API server status."
-          );
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProfileData();
-  }, []); // Empty dependency array means this runs once on mount
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <p className="text-gray-600 text-lg">Loading profile...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <p className="text-red-500 text-lg font-semibold">{error}</p>
-      </div>
-    );
-  }
-
-  if (!profileData) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <p className="text-red-500 text-lg font-semibold">
-          No profile data available after fetch.
-        </p>
-      </div>
-    );
-  }
+  if (loading) return <p className="text-center mt-10">Loading...</p>;
+  if (error) return <p className="text-red-500 text-center mt-10">{error}</p>;
 
   return (
-    <div className="p-4 max-w-xl mx-auto">
-      <h2 className="text-xl font-bold mb-4">Profile</h2>
-
-      <div className="space-y-2 bg-base-200 p-4 rounded-md shadow">
-        <p>
-          <strong>ID:</strong> {profileData.adminId || profileData.staffId}
-        </p>{" "}
-        <p>
-          <strong>Name:</strong> {profileData.name}
-        </p>
-        <p>
-          <strong>Email:</strong> {profileData.email}
-        </p>
-        <p>
-          <strong>Phone:</strong> {profileData.phone}
-        </p>
-        <p>
-          <strong>Role:</strong> {profileData.role}
-        </p>
-        {/* Display avatar if available */}
-        {profileData.avatar && profileData.avatar !== "null" && (
-          <p>
-            <strong>Avatar:</strong>{" "}
-            <img
-              src={`${API_BASE_URL.replace("/api", "")}/avatars/${
-                profileData.avatar
-              }`} // Adjust path to static files
-              alt="User Avatar"
-              className="w-16 h-16 rounded-full object-cover inline-block ml-2"
-            />
-          </p>
-        )}
-        {profileData.role === "admin" ? (
-          <p className="text-green-500 font-semibold">
-            আপনি একজন অ্যাডমিন, সব তথ্য দেখতে ও আপডেট করতে পারবেন।
-          </p>
-        ) : (
-          <>
-            <p>
-              <strong>Commission Percentage:</strong>{" "}
-              {profileData.commissionPercentage}%
-            </p>
-            {profileData.role === "designer" && (
-              <p>
-                <strong>Design Charge:</strong> {profileData.designCharge}
+    <div className="max-w-4xl mx-auto px-4 py-6">
+      {profileData && (
+        <div className="bg-white p-6 rounded-xl shadow-lg mb-8">
+          <div className="flex items-center gap-6">
+            <div>
+              {profileData.avatar && profileData.avatar !== "null" ? (
+                <img
+                  src={`https://test.api.dpmsign.com/avatars/${profileData.avatar}`}
+                  alt="Avatar"
+                  className="w-24 h-24 rounded-full border-4 border-blue-500 object-cover"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-4xl text-gray-500">
+                  {profileData.name?.charAt(0) || "A"}
+                </div>
+              )}
+            </div>
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold text-gray-800 mb-1">{profileData.name}</h2>
+              <p className="text-sm text-gray-600 mb-1">
+                <strong>Email:</strong> {profileData.email}
               </p>
-            )}
-            <p className="text-blue-500 font-semibold">
-              আপনি একজন স্টাফ ({profileData.role}), আপনি নিজের প্রোফাইল আপডেট
-              করতে পারবেন।
-            </p>
-          </>
-        )}
-      </div>
+              <p className="text-sm text-gray-600 mb-1">
+                <strong>Phone:</strong> {profileData.phone}
+              </p>
+              <p className="text-sm text-gray-600 mb-1">
+                <strong>Role:</strong>{" "}
+                <span className="capitalize">{profileData.role}</span>
+              </p>
+              <p className="text-green-600 font-medium mt-2">
+                ✅ আপনি একজন অ্যাডমিন। আপনি নিজের তথ্য আপডেট করতে পারবেন।
+              </p>
+            </div>
+            <div>
+              <button
+                onClick={() => setShowModal(true)}
+                className="btn btn-outline btn-sm"
+              >
+                ✏️ Update Profile
+              </button>
+            </div>
+          </div>
+
+        {showModal && (
+  <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-40">
+    <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full relative">
+      <button
+        className="absolute top-2 right-2 text-gray-600"
+        onClick={() => setShowModal(false)}
+      >
+        ❌
+      </button>
+      <AdminUpdateForm
+        profileData={profileData}
+        refreshProfile={fetchData}
+        onClose={() => setShowModal(false)}
+      />
+    </div>
+  </div>
+)}
+
+        </div>
+      )}
+
+      {/* Staff List */}
+      <StaffList 
+      staffList={staffList}
+      userRole={profileData?.role || JSON.parse(savedUserData)?.role}
+      ></StaffList>
     </div>
   );
 }

@@ -76,7 +76,8 @@ try {
 }
 
   const staffIdToSend =
-    userData?.role !== "admin" ? Number(userData?.staffId) : null;
+  userData?.role === "admin" ? 0 : Number(userData?.staffId);
+
 
   const calculateItemTotal = useCallback((item) => {
     const price = Number(item.customUnitPrice || 0);
@@ -279,6 +280,11 @@ try {
         Swal.fire("Success", "Order created", "success");
       }
     } catch (err) {
+  console.error("Save order error response:", err.response?.data || err.message);
+  Swal.fire("Error", "Failed to create order", "error");  // এখানে icon string দেওয়া হয়েছে
+}
+ {
+      
       Swal.fire("Error", "Failed to create order", "error");
     }
   };

@@ -402,53 +402,81 @@ export default function Staff() {
         </div>
       )}
 
+     
       {/* Staff List */}
-      <h2 className="text-2xl font-bold mb-4">Staff List</h2>
-      <div className="space-y-3">
-        {displayedStaff.length > 0 ? (
-          displayedStaff.map((staff) => (
-            <div
-              key={staff.staffId}
-              className="border p-4 rounded flex justify-between items-center shadow-sm hover:shadow-md transition"
-            >
-              <div>
-                <p className="font-semibold text-lg">{staff.name}</p>
-                <p className="text-gray-700">{staff.email}</p>
-                <p className="text-gray-700">Phone: {staff.phone}</p>
-                <p className="text-gray-700">Role: {staff.role}</p>
-                <p className="text-gray-700">
-                  Status:{" "}
-                  <span
-                    className={
-                      staff.status === "online"
-                        ? "text-green-600 font-semibold"
-                        : "text-red-600 font-semibold"
-                    }
-                  >
-                    {staff.status}
-                  </span>
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button
+<h2 className="text-2xl font-bold mb-4">Staff List</h2>
+<div className="overflow-x-auto bg-white shadow rounded-lg">
+  <table className="min-w-full divide-y divide-gray-200">
+    <thead className="bg-gray-50">
+      <tr>
+        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avatar</th>
+        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Edit</th>
+        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Delete</th>
+      </tr>
+    </thead>
+    <tbody className="bg-white divide-y divide-gray-200">
+      {displayedStaff.length > 0 ? (
+        displayedStaff.map((staff) => (
+          <tr key={staff.staffId} className="hover:bg-gray-50">
+            <td className="px-4 py-3">
+              {staff.avatar && staff.avatar !== "null" ? (
+                <img
+                  src={`https://test.api.dpmsign.com/avatars/${staff.avatar}`}
+                  alt="Avatar"
+                  className="w-10 h-10 rounded-full object-cover border"
+                />
+              ) : (
+                <div className="w-10 h-10 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-sm font-semibold">
+                  {staff.name?.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </td>
+            <td className="px-4 py-3 text-sm font-medium text-gray-800">{staff.name}</td>
+            <td className="px-4 py-3 text-sm text-gray-700">{staff.email}</td>
+            <td className="px-4 py-3 text-sm text-gray-700">{staff.phone}</td>
+            <td className="px-4 py-3 text-sm capitalize text-gray-700">{staff.role}</td>
+            <td className="px-4 py-3 text-sm">
+              <span
+                className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                  staff.status === "online" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                }`}
+              >
+                {staff.status}
+              </span>
+            </td>
+            <td className="px-4 py-3 text-right">
+              <button
                   onClick={() => setEditingStaff(staff)}
-                  className="bg-yellow-500 text-white px-4 py-1 rounded hover:bg-yellow-600 transition"
+                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm"
                 >
                   Edit
                 </button>
-                <button
+             
+            </td>
+            <td>  <button
                   onClick={() => handleDeleteStaff(staff)}
-                  className="bg-red-600 text-white px-4 py-1 rounded hover:bg-red-700 transition"
+                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
                 >
                   Delete
-                </button>
-              </div>
-            </div>
-          ))
-        ) : (
-          <p className="text-gray-500 text-center py-10">No staff found.</p>
-        )}
-      </div>
+                </button></td>
+          </tr>
+        ))
+      ) : (
+        <tr>
+          <td colSpan="7" className="px-4 py-6 text-center text-gray-500">
+            No staff found.
+          </td>
+        </tr>
+      )}
+    </tbody>
+  </table>
+</div>
+
 
       {/* Pagination Controls */}
       {renderPagination()}
