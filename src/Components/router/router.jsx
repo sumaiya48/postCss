@@ -34,6 +34,7 @@ import EditBlog from "../AdminPanel/Pages/Blog/EditBlog";
 import ViewProductDetails from "../AdminPanel/Pages/Products/ViewProductDetails";
 import UpdateProduct from "../AdminPanel/Pages/Products/UpdateProduct";
 import Profile from "../AdminPanel/Pages/Profile/Profile";
+import Register from "../AdminPanel/Pages/Register/Register";
 //import Login from "../AdminPanel/Pages/Login/Login";
 
 // Admin Panel Pages
@@ -100,6 +101,11 @@ const router = createBrowserRouter([
       },
     ],
   },
+
+  {
+    path:'/register',
+    element:<Register></Register>
+  }
   // {
   // path: "/admin",
   // element: <Login></Login>,

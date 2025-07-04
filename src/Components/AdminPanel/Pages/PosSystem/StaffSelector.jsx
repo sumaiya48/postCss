@@ -70,7 +70,7 @@ export default function StaffSelector({
       {selectedStaff && (
         <p className="mt-3 text-sm text-gray-600 font-medium">
           Currently Selected Staff:{" "}
-          <span className="text-blue-700">{selectedStaff.name}</span>
+          <span className="text-blue-700">{selectedStaff.name}  ({selectedStaff.phone})</span>
         </p>
       )}
       {!selectedStaffId && (

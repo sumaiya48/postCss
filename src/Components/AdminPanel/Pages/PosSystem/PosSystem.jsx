@@ -44,6 +44,10 @@ export default function POSDashboard() {
   const selectedCustomer = customers.find(
     (c) => c.customerId === Number(selectedCustomerId)
   );
+const selectedStaff = staffs.find(
+  (s) => s.staffId === Number(selectedStaffId)
+);
+
 
   // --- START: User Data and Staff ID Logic ---
   // Re-introducing userData parsing for role check
@@ -247,6 +251,7 @@ export default function POSDashboard() {
     const selectedStaff = staffs.find(
       (s) => s.staffId === Number(selectedStaffId)
     );
+    
 
     if (!selectedCustomer || selectedItems.length === 0) {
       Swal.fire("Error", "Missing customer or products", "error");
@@ -320,12 +325,9 @@ export default function POSDashboard() {
           grossTotal,
           couponDiscount,
           newOrderId,
-          // Pass staff name for invoice: if admin, it's N/A; otherwise, use selected staff's name
-          selectedStaffName: isAdmin
-            ? "N/A"
-            : selectedStaff
-            ? selectedStaff.name
-            : "N/A",
+          staffName: isAdmin ? "N/A" : selectedStaff?.name || "N/A",
+         
+          
         });
         setTriggerInvoiceGenerate(true);
         setSelectedItems([]);
@@ -407,11 +409,17 @@ export default function POSDashboard() {
           <p className="mb-3 italic text-gray-500">No customer selected</p>
         )}
 
-        <div className="flex justify-end mb-3">
-          <button onClick={handleOpenCustomerModal} className="btn btn-outline">
-            ➕ Add Customer
-          </button>
-        </div>
+      
+
+        {/* ✅ Staff Info 
+{selectedStaff && (
+  <div className="bg-gray-100 p-3 rounded mb-3 shadow">
+    <p><strong>Staff Name:</strong> {selectedStaff.name}</p>
+    <p><strong>Staff Phone:</strong> {selectedStaff.phone}</p>
+  </div>
+)} */}
+
+        
 
         <CustomerSelector
           customers={customers}
@@ -422,6 +430,12 @@ export default function POSDashboard() {
           }}
           triggerModalOpen={openCustomerModal}
         />
+
+          <div className="flex justify-end my-3">
+          <button onClick={handleOpenCustomerModal} className="btn btn-outline">
+            ➕ Add Customer
+          </button>
+        </div>
 
         {/* Line 407: Conditionally render Staff Selector if not an admin */}
         {!isAdmin && (
@@ -484,6 +498,7 @@ export default function POSDashboard() {
             {...invoiceData}
             triggerGenerate={triggerInvoiceGenerate}
             onGenerated={handleInvoiceGenerated}
+            staffName={invoiceData.staffName}
           />
         )}
       </div>

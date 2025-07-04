@@ -74,15 +74,27 @@ const InvoicePDF = ({
   grossTotal,
   couponDiscount,
   newOrderId,
+  selectedStaffName,
+  staffName // 🟢 নতুন প্রপ
 }) => (
+
   <Document>
     <Page size="A4" style={styles.page}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>🧾 Invoice</Text>
-        <Text>Order ID: #{newOrderId}</Text>
-        <Text>Customer: {selectedCustomer.name} ({selectedCustomer.phone})</Text>
-        <Text>Date: {new Date().toLocaleDateString()}</Text>
+        <Text style={{ ...styles.title, textAlign: "center" }}>🧾 Invoice</Text>
+        <View style={{ marginTop: 10 }}>
+          <Text>Order ID: #{newOrderId}</Text>
+          <Text>Date: {new Date().toLocaleDateString()}</Text>
+        </View>
+       
+        <View style={{ marginTop: 10 }}>
+  <Text>Customer: {selectedCustomer.name} ({selectedCustomer.phone})</Text>
+  <Text>Staff: {staffName || "N/A"}</Text>
+
+
+</View>
+
       </View>
 
       {/* Order Items */}
@@ -98,7 +110,9 @@ const InvoicePDF = ({
           <View key={index} style={styles.row}>
             <Text style={styles.cell}>{item.name}</Text>
             <Text style={styles.cell}>{item.quantity}</Text>
-            <Text style={styles.cell}>{Number(item.customUnitPrice).toFixed(2)} Tk</Text>
+            <Text style={styles.cell}>
+              {Number(item.customUnitPrice).toFixed(2)} Tk
+            </Text>
             <Text style={styles.amountRight}>
               {(item.customUnitPrice * item.quantity).toFixed(2)} Tk
             </Text>
@@ -131,6 +145,7 @@ const InvoicePDF = ({
   </Document>
 );
 
+
 // Generator Component
 const InvoiceGenerator = ({
   orderData,
@@ -141,18 +156,21 @@ const InvoiceGenerator = ({
   newOrderId,
   triggerGenerate,
   onGenerated,
+  staffName,
 }) => {
   useEffect(() => {
     const generateAndDownload = async () => {
       const blob = await pdf(
-        <InvoicePDF
-          orderData={orderData}
-          selectedCustomer={selectedCustomer}
-          selectedItems={selectedItems}
-          grossTotal={grossTotal}
-          couponDiscount={couponDiscount}
-          newOrderId={newOrderId}
-        />
+       <InvoicePDF
+  orderData={orderData}
+  selectedCustomer={selectedCustomer}
+  selectedItems={selectedItems}
+  grossTotal={grossTotal}
+  couponDiscount={couponDiscount}
+  newOrderId={newOrderId}
+  staffName={staffName}
+/>
+
       ).toBlob();
 
       const url = URL.createObjectURL(blob);
@@ -160,6 +178,8 @@ const InvoiceGenerator = ({
       link.href = url;
       link.download = `invoice-#${newOrderId}.pdf`;
       document.body.appendChild(link);
+      console.log("Download URL:", url);
+
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
