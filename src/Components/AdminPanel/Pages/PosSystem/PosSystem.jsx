@@ -1,4 +1,4 @@
-// POSDashboard.jsx (Reconstructed POSSystem)
+// POSDashboard.jsx
 import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
@@ -9,6 +9,7 @@ import CustomerSelector from "./CustomerSelector";
 import CouponInput from "./CouponInput";
 import OrderTotals from "./OrderTotals";
 import InvoiceGenerator from "./InvoiceGenerator";
+import StaffSelector from "./StaffSelector";
 
 export default function POSDashboard() {
   // State
@@ -19,6 +20,9 @@ export default function POSDashboard() {
   const [customers, setCustomers] = useState([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [searchText, setSearchText] = useState("");
+
+  const [staffs, setStaffs] = useState([]); // To store the list of all staffs
+  const [selectedStaffId, setSelectedStaffId] = useState(null); // The manually selected staff ID
 
   const [couponCode, setCouponCode] = useState("");
   const [couponDiscount, setCouponDiscount] = useState(0);
@@ -36,48 +40,71 @@ export default function POSDashboard() {
   const [triggerInvoiceGenerate, setTriggerInvoiceGenerate] = useState(false);
   const [invoiceData, setInvoiceData] = useState(null);
 
-
   // নতুন: select করা customer এর object খুঁজে নিচ্ছি
   const selectedCustomer = customers.find(
     (c) => c.customerId === Number(selectedCustomerId)
   );
 
+  // --- START: User Data and Staff ID Logic ---
+  // Re-introducing userData parsing for role check
+  let userData = null;
+  try {
+    const raw = localStorage.getItem("userData");
+    if (raw && raw !== "undefined") {
+      userData = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error("Invalid userData in localStorage:", e);
+    localStorage.removeItem("userData"); // future protection
+  }
+
+  // Determine if the logged-in user is an admin
+  const isAdmin = userData?.role === "admin";
+  // Line 60: Debugging isAdmin status
+  //console.log("Is Admin:", isAdmin, "User Data Role:", userData?.role);
+  // --- END: User Data and Staff ID Logic ---
+
+  // fetching staffs
+  const fetchStaffs = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      //console.log("Fetching staffs with token:", token); // Debugging token
+      const res = await axios.get("https://test.api.dpmsign.com/api/staff", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      //console.log("Fetched Staffs Response:", res.data); // Keep this log for verification
+
+      // Line 70: CRITICAL FIX: Change res.data.data.staffs to res.data.data.staff
+      if (res.data && res.data.data && Array.isArray(res.data.data.staff)) {
+        setStaffs(res.data.data.staff); // <--- Changed from .staffs to .staff
+        console.log("Staffs set in state:", res.data.data.staff); // Confirm data set
+      } else {
+        console.warn("Staffs data is not an array or missing:", res.data);
+        setStaffs([]); // Ensure it's an empty array if data is malformed
+      }
+    } catch (err) {
+      console.error(
+        "Failed to fetch staffs:",
+        err.response?.data || err.message
+      );
+      Swal.fire("Error", "Failed to load staff list.", "error");
+    }
+  };
 
   // নতুন function, selected customer unselect করার জন্য
   const handleUnselectCustomer = () => {
     setSelectedCustomerId(null);
   };
 
-
-
-
-
   // POSDashboard.jsx
-const [openCustomerModal, setOpenCustomerModal] = useState(false);
+  const [openCustomerModal, setOpenCustomerModal] = useState(false);
 
-const handleOpenCustomerModal = () => {
-  setOpenCustomerModal(false); // 👈 প্রথমে false করে reset করি
-  setTimeout(() => {
-    setOpenCustomerModal(true); // 👈 তারপর আবার true করে trigger দিই
-  }, 50);
-};
-
-
-
- let userData = null;
-try {
-  const raw = localStorage.getItem("userData");
-  if (raw && raw !== "undefined") {
-    userData = JSON.parse(raw);
-  }
-} catch (e) {
-  console.error("Invalid userData in localStorage:", e);
-  localStorage.removeItem("userData"); // future protection
-}
-
-  const staffIdToSend =
-  userData?.role === "admin" ? 0 : Number(userData?.staffId);
-
+  const handleOpenCustomerModal = () => {
+    setOpenCustomerModal(false); // 👈 প্রথমে false করে reset করি
+    setTimeout(() => {
+      setOpenCustomerModal(true); // 👈 তারপর আবার true করে trigger দিই
+    }, 50);
+  };
 
   const calculateItemTotal = useCallback((item) => {
     const price = Number(item.customUnitPrice || 0);
@@ -215,9 +242,32 @@ try {
       (c) => c.customerId === Number(selectedCustomerId)
     );
 
+    // Find the selected staff object for displaying the name
+    // This will be used for invoice data if a staff is selected
+    const selectedStaff = staffs.find(
+      (s) => s.staffId === Number(selectedStaffId)
+    );
+
     if (!selectedCustomer || selectedItems.length === 0) {
       Swal.fire("Error", "Missing customer or products", "error");
       return;
+    }
+
+    // Determine staffId to send based on admin role or manual selection
+    let staffIdToSend = null;
+    if (isAdmin) {
+      staffIdToSend = null; // Admins don't need to specify staffId
+    } else {
+      // For non-admin users, staffId is required and must be selected
+      if (!selectedStaffId) {
+        Swal.fire(
+          "Error",
+          "Please select a staff member for the order.",
+          "error"
+        );
+        return;
+      }
+      staffIdToSend = selectedStaffId;
     }
 
     const orderData = {
@@ -225,7 +275,7 @@ try {
       customerName: selectedCustomer.name,
       customerEmail: selectedCustomer.email || "",
       customerPhone: selectedCustomer.phone,
-      staffId: staffIdToSend,
+      staffId: staffIdToSend, // Use the determined staffId
       method: paymentMethod === "online-payment" ? "online" : "offline",
       status: "order-request-received",
       currentStatus: "order-request-received",
@@ -270,22 +320,28 @@ try {
           grossTotal,
           couponDiscount,
           newOrderId,
+          // Pass staff name for invoice: if admin, it's N/A; otherwise, use selected staff's name
+          selectedStaffName: isAdmin
+            ? "N/A"
+            : selectedStaff
+            ? selectedStaff.name
+            : "N/A",
         });
         setTriggerInvoiceGenerate(true);
         setSelectedItems([]);
         setSelectedCustomerId(null);
+        setSelectedStaffId(null); // Reset selected staff after order
         setCouponCode("");
         setCouponDiscount(0);
         fetchNextOrderId();
         Swal.fire("Success", "Order created", "success");
       }
     } catch (err) {
-  console.error("Save order error response:", err.response?.data || err.message);
-  Swal.fire("Error", "Failed to create order", "error");  // এখানে icon string দেওয়া হয়েছে
-}
- {
-      
-      Swal.fire("Error", "Failed to create order", "error");
+      console.error(
+        "Save order error response:",
+        err.response?.data || err.message
+      );
+      Swal.fire("Error", "Failed to create order", "error"); // এখানে icon string দেওয়া হয়েছে
     }
   };
 
@@ -297,7 +353,14 @@ try {
   useEffect(() => {
     fetchNextOrderId();
     fetchCustomers();
-  }, []);
+    // Line 345: Only fetch staffs if the user is NOT an admin
+    if (!isAdmin) {
+      console.log("User is NOT admin, fetching staffs..."); // Debugging call
+      fetchStaffs();
+    } else {
+      console.log("User is admin, skipping staff fetch."); // Debugging call
+    }
+  }, [isAdmin]); // Re-run if isAdmin changes (e.g., after login/logout)
 
   useEffect(() => {
     fetchCategories();
@@ -325,8 +388,12 @@ try {
         {selectedCustomer ? (
           <div className="flex items-center justify-between bg-gray-100 p-3 rounded mb-3 shadow">
             <div>
-              <p><strong>Name:</strong> {selectedCustomer.name}</p>
-              <p><strong>Number:</strong> {selectedCustomer.phone}</p>
+              <p>
+                <strong>Name:</strong> {selectedCustomer.name}
+              </p>
+              <p>
+                <strong>Number:</strong> {selectedCustomer.phone}
+              </p>
             </div>
             <button
               onClick={handleUnselectCustomer}
@@ -341,10 +408,7 @@ try {
         )}
 
         <div className="flex justify-end mb-3">
-          <button
-            onClick={handleOpenCustomerModal}
-            className="btn btn-outline"
-          >
+          <button onClick={handleOpenCustomerModal} className="btn btn-outline">
             ➕ Add Customer
           </button>
         </div>
@@ -358,6 +422,16 @@ try {
           }}
           triggerModalOpen={openCustomerModal}
         />
+
+        {/* Line 407: Conditionally render Staff Selector if not an admin */}
+        {!isAdmin && (
+          // Using the StaffSelector component here
+          <StaffSelector
+            staffs={staffs}
+            selectedStaffId={selectedStaffId}
+            setSelectedStaffId={setSelectedStaffId}
+          />
+        )}
 
         <OrderSummary
           selectedItems={selectedItems}
@@ -376,7 +450,7 @@ try {
           couponError={couponError}
           couponDiscount={couponDiscount}
         /> */}
-<hr />
+        <hr />
         <OrderTotals
           subTotal={subTotal}
           couponDiscount={couponDiscount}
