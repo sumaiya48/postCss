@@ -12,8 +12,7 @@ export default function UpdateProduct() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [allFetchedCategories, setAllFetchedCategories] = useState([]);
-const [subCategories, setSubCategories] = useState([]);
-
+  const [subCategories, setSubCategories] = useState([]);
 
   // State holders for all editable fields:
   const [basic, setBasic] = useState({
@@ -21,9 +20,14 @@ const [subCategories, setSubCategories] = useState([]);
     description: "",
     basePrice: "",
     minOrderQuantity: "",
+    discountStart: null,
+    discountEnd: null,
+    discountPercentage: null,
+    maxDiscountPercentage: null,
     pricingType: "flat",
     isActive: true,
     categoryId: null,
+    sku: "", // SKU is read-only but part of basic info
   });
   const [tags, setTags] = useState([]);
   const [attributes, setAttributes] = useState([]);
@@ -34,31 +38,35 @@ const [subCategories, setSubCategories] = useState([]);
 
   useEffect(() => {
     (async () => {
-      await fetchCategories();
+      await fetchCategories(); // Fetch categories first as product details depend on it
       if (productId) await fetchProductDetails(productId);
       setLoading(false);
     })();
   }, [productId]);
 
- async function fetchCategories() {
-  try {
-    const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
-    const all = res.data.data.categories || [];
-    setAllFetchedCategories(all);
+  async function fetchCategories() {
+    try {
+      const res = await axios.get(
+        "https://test.api.dpmsign.com/api/product-category"
+      );
+      const all = res.data.data.categories || [];
+      setAllFetchedCategories(all);
 
-    const topLevel = all.filter(cat => cat.parentCategoryId === null);
-    setCategories(topLevel);
-  } catch (err) {
-    console.error(err);
+      const topLevel = all.filter((cat) => cat.parentCategoryId === null);
+      setCategories(topLevel);
+    } catch (err) {
+      console.error(err);
+    }
   }
-}
-
 
   async function fetchProductDetails(id) {
     try {
-      const res = await axios.get(`https://test.api.dpmsign.com/api/product/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.get(
+        `https://test.api.dpmsign.com/api/product/${id}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       const p = res.data.data.product;
       setBasic({
         name: p.name,
@@ -67,35 +75,70 @@ const [subCategories, setSubCategories] = useState([]);
         minOrderQuantity: p.minOrderQuantity,
         pricingType: p.pricingType,
         isActive: p.isActive,
+        discountStart: p.discountStart,
+        discountEnd: p.discountEnd,
+        discountPercentage: p.discountPercentage,
+        maxDiscountPercentage: p.maxDiscountPercentage,
         categoryId: p.categoryId || "",
+        sku: p.sku || "",
       });
-      const parentCategory = allFetchedCategories.find(
-  (cat) => cat.categoryId === p.categoryId || cat.subCategories?.some(sub => sub.categoryId === p.categoryId)
-);
-setSubCategories(parentCategory?.subCategories || []);
 
-      setTags(p.tags?.map(t => t.tag) || []);
-      setAttributes(p.attributes?.map(a => ({
-        property: a.property, description: a.description, attributeId: a.attributeId
-      })) || []);
-      setVariations(p.variations?.map(v => ({
-        name: v.name,
-        unit: v.unit,
-        variationItems: v.variationItems.map(vi => ({
-          value: vi.value,
-          variationItemId: vi.variationItemId
-        })),
-        variationId: v.variationId
-      })) || []);
-      setVariants(p.variants?.map(v => ({
-        additionalPrice: v.additionalPrice,
-        variantDetails: v.variantDetails.map(d => ({
-          variationName: d.variationItem?.variation?.name,
-          variationItemValue: d.variationItem?.value,
-          productVariantDetailId: d.productVariantDetailId
-        })),
-        productVariantId: v.productVariantId
-      })) || []);
+      // Determine parent category and set subcategories based on the fetched product's categoryId
+      const selectedCategory = allFetchedCategories.find(
+        (cat) => cat.categoryId === p.categoryId
+      );
+      if (selectedCategory && selectedCategory.parentCategoryId !== null) {
+        // If the product's category is a sub-category, find its parent
+        const parentOfSubCategory = allFetchedCategories.find(
+          (cat) => cat.categoryId === selectedCategory.parentCategoryId
+        );
+        setSubCategories(parentOfSubCategory?.subCategories || []);
+        // Set both parent and sub-category for the dropdowns
+        setBasic((prev) => ({
+          ...prev,
+          categoryId: parentOfSubCategory.categoryId,
+          subCategoryId: p.categoryId,
+        }));
+      } else {
+        // If it's a top-level category or no sub-category, set just categoryId
+        setSubCategories(selectedCategory?.subCategories || []);
+        setBasic((prev) => ({
+          ...prev,
+          categoryId: p.categoryId,
+          subCategoryId: null,
+        }));
+      }
+
+      setTags(p.tags?.map((t) => t.tag) || []);
+      setAttributes(
+        p.attributes?.map((a) => ({
+          property: a.property,
+          description: a.description,
+          attributeId: a.attributeId,
+        })) || []
+      );
+      setVariations(
+        p.variations?.map((v) => ({
+          name: v.name,
+          unit: v.unit,
+          variationItems: v.variationItems.map((vi) => ({
+            value: vi.value,
+            variationItemId: vi.variationItemId,
+          })),
+          variationId: v.variationId,
+        })) || []
+      );
+      setVariants(
+        p.variants?.map((v) => ({
+          additionalPrice: v.additionalPrice,
+          variantDetails: v.variantDetails.map((d) => ({
+            variationName: d.variationItem?.variation?.name, // Adjusted to safely access variation name
+            variationItemValue: d.variationItem?.value, // Adjusted to safely access variation item value
+            productVariantDetailId: d.productVariantDetailId,
+          })),
+          productVariantId: v.productVariantId,
+        })) || []
+      );
       setExistingImages(p.images || []);
     } catch (err) {
       console.error(err);
@@ -103,183 +146,296 @@ setSubCategories(parentCategory?.subCategories || []);
     }
   }
 
- function handleBasicChange(e) {
-  const { name, value, type, checked } = e.target;
+  function handleBasicChange(e) {
+    const { name, value, type, checked } = e.target;
 
-  if (name === "categoryId") {
-    const selectedCategoryId = Number(value);
-    const selectedCategory = allFetchedCategories.find(
-      (cat) => cat.categoryId === selectedCategoryId
-    );
+    if (name === "categoryId") {
+      const selectedCategoryId = Number(value);
+      const selectedCategory = allFetchedCategories.find(
+        (cat) => cat.categoryId === selectedCategoryId
+      );
 
-    setBasic(prev => ({
-      ...prev,
-      categoryId: selectedCategoryId,
-      subCategoryId: null
-    }));
-
-    setSubCategories(selectedCategory?.subCategories || []);
-  } else if (name === "subCategoryId") {
-    setBasic(prev => ({ ...prev, subCategoryId: Number(value) }));
-  } else {
-    setBasic(prev => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value
-    }));
+      setBasic((prev) => ({
+        ...prev,
+        categoryId: selectedCategoryId,
+        subCategoryId: null, // Reset subcategory when parent category changes
+      }));
+      setSubCategories(selectedCategory?.subCategories || []);
+    } else if (name === "subCategoryId") {
+      setBasic((prev) => ({ ...prev, subCategoryId: Number(value) }));
+    } else {
+      setBasic((prev) => ({
+        ...prev,
+        [name]:
+          type === "checkbox"
+            ? checked
+            : value === "" // Treat empty string inputs for numbers as null for optional fields
+            ? null
+            : Number.isNaN(Number(value)) ||
+              name === "description" ||
+              name === "name" ||
+              name === "pricingType" // Don't convert non-numeric or specific text fields to numbers
+            ? value
+            : Number(value),
+      }));
+    }
   }
-}
-
 
   // Tag handlers
-  const addTag = () => setTags(prev => [...prev, ""]);
-  const updateTag = (i, value) => setTags(prev => prev.map((t, idx) => idx === i ? value : t));
-  const removeTag = (i) => setTags(prev => prev.filter((_, idx) => idx !== i));
+  const addTag = () => setTags((prev) => [...prev, ""]);
+  const updateTag = (i, value) =>
+    setTags((prev) => prev.map((t, idx) => (idx === i ? value : t)));
+  const removeTag = (i) =>
+    setTags((prev) => prev.filter((_, idx) => idx !== i));
 
   // Attribute handlers
-  const addAttr = () => setAttributes(prev => [...prev, { property: "", description: "" }]);
+  const addAttr = () =>
+    setAttributes((prev) => [...prev, { property: "", description: "" }]);
   const updateAttr = (i, field, value) => {
-    setAttributes(prev => prev.map((a, idx) =>
-      idx === i ? { ...a, [field]: value } : a
-    ));
+    setAttributes((prev) =>
+      prev.map((a, idx) => (idx === i ? { ...a, [field]: value } : a))
+    );
   };
-  const removeAttr = (i) => setAttributes(prev => prev.filter((_, idx) => idx !== i));
+  const removeAttr = (i) =>
+    setAttributes((prev) => prev.filter((_, idx) => idx !== i));
 
   // Variation handlers
-  const addVar = () => setVariations(prev => [...prev, { name: "", unit: "", variationItems: [] }]);
-  const updateVar = (i, field, value) => setVariations(prev => prev.map((v, idx) =>
-    idx === i ? { ...v, [field]: value } : v
-  ));
+  const addVar = () =>
+    setVariations((prev) => [
+      ...prev,
+      { name: "", unit: "", variationItems: [] },
+    ]);
+  const updateVar = (i, field, value) =>
+    setVariations((prev) =>
+      prev.map((v, idx) => (idx === i ? { ...v, [field]: value } : v))
+    );
   const addVarItem = (i) => {
-    setVariations(prev =>
+    setVariations((prev) =>
       prev.map((v, idx) =>
-        idx === i ? { ...v, variationItems: [...v.variationItems, { value: "" }] } : v
+        idx === i
+          ? { ...v, variationItems: [...v.variationItems, { value: "" }] }
+          : v
       )
     );
   };
   const updateVarItem = (i, j, value) => {
-    setVariations(prev => prev.map((v, idx) =>
-      idx === i ? {
-        ...v,
-        variationItems: v.variationItems.map((vi, viIdx) =>
-          viIdx === j ? { ...vi, value } : vi
-        ),
-      } : v
-    ));
+    setVariations((prev) =>
+      prev.map((v, idx) =>
+        idx === i
+          ? {
+              ...v,
+              variationItems: v.variationItems.map((vi, viIdx) =>
+                viIdx === j ? { ...vi, value } : vi
+              ),
+            }
+          : v
+      )
+    );
   };
   const removeVarItem = (i, j) => {
-    setVariations(prev => prev.map((v, idx) =>
-      idx === i
-        ? { ...v, variationItems: v.variationItems.filter((_, viIdx) => viIdx !== j) }
-        : v
-    ));
+    setVariations((prev) =>
+      prev.map((v, idx) =>
+        idx === i
+          ? {
+              ...v,
+              variationItems: v.variationItems.filter(
+                (_, viIdx) => viIdx !== j
+              ),
+            }
+          : v
+      )
+    );
   };
-  const removeVar = (i) => setVariations(prev => prev.filter((_, idx) => idx !== i));
+  const removeVar = (i) =>
+    setVariations((prev) => prev.filter((_, idx) => idx !== i));
 
   // Variant handlers
-  const addVt = () => setVariants(prev => [...prev, { additionalPrice: "", variantDetails: [] }]);
+  const addVt = () =>
+    setVariants((prev) => [
+      ...prev,
+      { additionalPrice: "", variantDetails: [] },
+    ]);
   const updateVt = (i, field, value) =>
-    setVariants(prev => prev.map((v, idx) =>
-      idx === i ? { ...v, [field]: value } : v
-    ));
+    setVariants((prev) =>
+      prev.map((v, idx) => (idx === i ? { ...v, [field]: value } : v))
+    );
   const addVtDetail = (i) =>
-    setVariants(prev => prev.map((v, idx) =>
-      idx === i ? {
-        ...v,
-        variantDetails: [...v.variantDetails, { variationName: "", variationItemValue: "" }],
-      } : v
-    ));
+    setVariants((prev) =>
+      prev.map((v, idx) =>
+        idx === i
+          ? {
+              ...v,
+              variantDetails: [
+                ...v.variantDetails,
+                { variationName: "", variationItemValue: "" },
+              ],
+            }
+          : v
+      )
+    );
   const updateVtDetail = (i, j, field, value) =>
-    setVariants(prev => prev.map((v, idx) =>
-      idx === i ? {
-        ...v,
-        variantDetails: v.variantDetails.map((d, di) =>
-          di === j ? { ...d, [field]: value } : d
-        ),
-      } : v
-    ));
+    setVariants((prev) =>
+      prev.map((v, idx) =>
+        idx === i
+          ? {
+              ...v,
+              variantDetails: v.variantDetails.map((d, di) =>
+                di === j ? { ...d, [field]: value } : d
+              ),
+            }
+          : v
+      )
+    );
   const removeVtDetail = (i, j) =>
-    setVariants(prev => prev.map((v, idx) =>
-      idx === i
-        ? { ...v, variantDetails: v.variantDetails.filter((_, di) => di !== j) }
-        : v
-    ));
-  const removeVt = (i) => setVariants(prev => prev.filter((_, idx) => idx !== i));
+    setVariants((prev) =>
+      prev.map((v, idx) =>
+        idx === i
+          ? {
+              ...v,
+              variantDetails: v.variantDetails.filter((_, di) => di !== j),
+            }
+          : v
+      )
+    );
+  const removeVt = (i) =>
+    setVariants((prev) => prev.filter((_, idx) => idx !== i));
 
   // Images
   const uploadNewImages = (e) => {
     const files = Array.from(e.target.files);
-    setNewImages(prev => [...prev, ...files]);
+    setNewImages((prev) => [...prev, ...files]);
   };
-  const removeNewImage = (i) => setNewImages(prev => prev.filter((_, idx) => idx !== i));
+  const removeNewImage = (i) =>
+    setNewImages((prev) => prev.filter((_, idx) => idx !== i));
   const removeExistingImage = (imgId) => {
-    setExistingImages(prev => prev.filter(i => i.imageId !== imgId));
+    setExistingImages((prev) => prev.filter((i) => i.imageId !== imgId));
   };
 
   async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
     try {
+      // Determine the final category ID (sub-category if selected, otherwise parent category)
       const finalCategoryId = basic.subCategoryId || basic.categoryId;
 
-      // Step 1: PUT updated product
-      const {
-  name,
-  description,
-  basePrice,
-  minOrderQuantity,
-  pricingType,
-  isActive,
-  sku, // Optional
-} = basic;
+      // Create FormData object to send both JSON data and files
+      const formData = new FormData();
 
-const payload = {
-  productId: Number(productId),
-  name,
-  description,
-  basePrice: Number(basePrice),
-  minOrderQuantity: Number(minOrderQuantity),
-  pricingType,
-  isActive,
-  categoryId: finalCategoryId || null,
-  attributes: attributes.map(({ attributeId, ...a }) => a),
-  tags,
-  variations: variations.map(({ variationItems, variationId, ...v }) => ({
-    ...v,
-    variationItems: variationItems.map(({ variationItemId, ...vi }) => vi),
-  })),
-  variants: variants.map(({ productVariantId, variantDetails, ...v }) => ({
-    ...v,
-    variantDetails: variantDetails.map(({ productVariantDetailId, ...d }) => d),
-  })),
-};
+      // Append product ID
+      formData.append("productId", Number(productId));
 
-      await axios.put("https://test.api.dpmsign.com/api/product", payload, {
-        headers: { Authorization: `Bearer ${token}` }
+      // Append basic product information
+      formData.append("name", basic.name);
+      formData.append("description", basic.description);
+      formData.append("basePrice", Number(basic.basePrice));
+      formData.append("minOrderQuantity", Number(basic.minOrderQuantity));
+      formData.append("pricingType", basic.pricingType);
+      formData.append("isActive", basic.isActive);
+      // Ensure categoryId is sent, converting null to empty string if no category selected
+      formData.append(
+        "categoryId",
+        finalCategoryId !== null ? String(finalCategoryId) : ""
+      );
+
+      // Append discount fields, converting null to empty string for FormData
+      formData.append(
+        "discountStart",
+        basic.discountStart !== null && basic.discountStart !== ""
+          ? Number(basic.discountStart)
+          : ""
+      );
+      formData.append(
+        "discountEnd",
+        basic.discountEnd !== null && basic.discountEnd !== ""
+          ? Number(basic.discountEnd)
+          : ""
+      );
+      formData.append(
+        "discountPercentage",
+        basic.discountPercentage !== null && basic.discountPercentage !== ""
+          ? Number(basic.discountPercentage)
+          : ""
+      );
+      formData.append(
+        "maxDiscountPercentage",
+        basic.maxDiscountPercentage !== null &&
+          basic.maxDiscountPercentage !== ""
+          ? Number(basic.maxDiscountPercentage)
+          : ""
+      );
+
+      // Append stringified arrays for complex data (tags, attributes, variations, variants)
+      formData.append(
+        "attributes",
+        JSON.stringify(attributes.map(({ attributeId, ...a }) => a))
+      ); // Remove attributeId for new attributes
+      formData.append("tags", JSON.stringify(tags));
+      formData.append(
+        "variations",
+        JSON.stringify(
+          variations.map(({ variationItems, variationId, ...v }) => ({
+            ...v,
+            variationItems: variationItems.map(
+              ({ variationItemId, ...vi }) => vi
+            ), // Remove variationItemId for new variation items
+          }))
+        )
+      );
+      formData.append(
+        "variants",
+        JSON.stringify(
+          variants.map(({ productVariantId, variantDetails, ...v }) => ({
+            ...v,
+            additionalPrice: Number(v.additionalPrice) || 0, // Ensure additionalPrice is a number
+            variantDetails: variantDetails.map(
+              ({ productVariantDetailId, ...d }) => d
+            ), // Remove productVariantDetailId for new variant details
+          }))
+        )
+      );
+
+      // Append IDs of existing images to be kept
+      formData.append(
+        "existingImageIds",
+        JSON.stringify(existingImages.map((img) => img.imageId))
+      );
+
+      // Append new image files
+      newImages.forEach((file) => {
+        formData.append("product-images", file); // 'product-images' must match Multer field name in backend
       });
 
-      // Step 2: Upload new images if present
-      if (newImages.length) {
-        const form = new FormData();
-        form.append("productId", productId);
-        newImages.forEach(f => form.append("product-images", f));
-        await axios.put("https://test.api.dpmsign.com/api/product/edit-image", form, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data"
-          }
-        });
-      }
+      // Make the PUT request
+      await axios.put("https://test.api.dpmsign.com/api/product", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // Axios automatically sets 'Content-Type': 'multipart/form-data' when FormData is passed.
+          // Do NOT set it manually here.
+        },
+      });
 
       Swal.fire("Success!", "Product updated successfully!", "success");
       navigate("/products/all");
     } catch (err) {
-      console.error(err);
-      Swal.fire("Error!", err.response?.data?.message || "Update failed", "error");
+      console.error(
+        "Product update error:",
+        err.response?.data?.message || err.message || err
+      );
+      Swal.fire(
+        "Error!",
+        err.response?.data?.message ||
+          "Product update failed. Please try again.",
+        "error"
+      );
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
-  if (loading) return <div className="p-8 text-lg text-center">Loading product details...</div>;
+  if (loading)
+    return (
+      <div className="p-8 text-lg text-center">Loading product details...</div>
+    );
 
   return (
     <div className="max-w-5xl mx-auto p-8 bg-white shadow-md rounded-md">
@@ -289,17 +445,21 @@ const payload = {
       >
         ← Back
       </button>
-      <h1 className="text-4xl font-extrabold mb-8 text-gray-800">Update Product</h1>
+      <h1 className="text-4xl font-extrabold mb-8 text-gray-800">
+        Update Product
+      </h1>
 
       <form onSubmit={handleSubmit} className="space-y-10">
-
         {/* Basic Info Section */}
         <section className="space-y-6">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Basic Information</h2>
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Basic Information
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
             <div>
-              <label className="block mb-1 font-medium text-gray-700">Name <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Name <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 name="name"
@@ -307,13 +467,16 @@ const payload = {
                 onChange={handleBasicChange}
                 className="input input-bordered w-full"
                 required
+                minLength={5}
                 placeholder="Enter product name"
                 autoComplete="off"
               />
             </div>
 
             <div>
-              <label className="block mb-1 font-medium text-gray-700">SKU (read-only)</label>
+              <label className="block mb-1 font-medium text-gray-700">
+                SKU (read-only)
+              </label>
               <input
                 type="text"
                 value={basic.sku || "N/A"}
@@ -324,7 +487,9 @@ const payload = {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium text-gray-700">Base Price <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Base Price <span className="text-red-500">*</span>
+              </label>
               <input
                 name="basePrice"
                 type="number"
@@ -338,7 +503,9 @@ const payload = {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium text-gray-700">Minimum Order Qty <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Minimum Order Qty <span className="text-red-500">*</span>
+              </label>
               <input
                 name="minOrderQuantity"
                 type="number"
@@ -352,7 +519,9 @@ const payload = {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium text-gray-700">Pricing Type <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Pricing Type <span className="text-red-500">*</span>
+              </label>
               <select
                 name="pricingType"
                 value={basic.pricingType}
@@ -365,6 +534,66 @@ const payload = {
               </select>
             </div>
 
+            {/* Discount fields */}
+            <div>
+              <label className="block mb-1 font-medium text-gray-700">
+                Discount Start (Optional)
+              </label>
+              <input
+                name="discountStart"
+                type="number"
+                value={basic.discountStart || ""}
+                onChange={handleBasicChange}
+                className="input input-bordered w-full"
+                min={0}
+                placeholder="Enter discount start amount"
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-medium text-gray-700">
+                Discount End (Optional)
+              </label>
+              <input
+                name="discountEnd"
+                type="number"
+                value={basic.discountEnd || ""}
+                onChange={handleBasicChange}
+                className="input input-bordered w-full"
+                min={0}
+                placeholder="Enter discount end amount"
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-medium text-gray-700">
+                Discount Percentage (Optional)
+              </label>
+              <input
+                name="discountPercentage"
+                type="number"
+                value={basic.discountPercentage || ""}
+                onChange={handleBasicChange}
+                className="input input-bordered w-full"
+                min={0}
+                max={100}
+                placeholder="Enter discount percentage (0-100)"
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-medium text-gray-700">
+                Max Discount Percentage (Optional)
+              </label>
+              <input
+                name="maxDiscountPercentage"
+                type="number"
+                value={basic.maxDiscountPercentage || ""}
+                onChange={handleBasicChange}
+                className="input input-bordered w-full"
+                min={0}
+                max={100}
+                placeholder="Enter maximum discount percentage (0-100)"
+              />
+            </div>
+
             <div className="flex items-center space-x-3 mt-6">
               <input
                 name="isActive"
@@ -374,13 +603,18 @@ const payload = {
                 className="checkbox checkbox-primary"
                 id="isActive"
               />
-              <label htmlFor="isActive" className="font-medium text-gray-700 cursor-pointer">
+              <label
+                htmlFor="isActive"
+                className="font-medium text-gray-700 cursor-pointer"
+              >
                 Active
               </label>
             </div>
 
             <div className="md:col-span-2">
-              <label className="block mb-1 font-medium text-gray-700">Description <span className="text-red-500">*</span></label>
+              <label className="block mb-1 font-medium text-gray-700">
+                Description <span className="text-red-500">*</span>
+              </label>
               <textarea
                 name="description"
                 value={basic.description}
@@ -393,49 +627,63 @@ const payload = {
             </div>
 
             <div className="md:col-span-2">
-  <label className="block mb-1 font-medium text-gray-700">Category</label>
-  <select
-    name="categoryId"
-    value={basic.categoryId}
-    onChange={handleBasicChange}
-    className="select select-bordered w-full"
-  >
-    <option value="">Select Parent Category</option>
-    {categories.map(c => (
-      <option key={c.categoryId} value={c.categoryId}>{c.name}</option>
-    ))}
-  </select>
-</div>
+              <label className="block mb-1 font-medium text-gray-700">
+                Category
+              </label>
+              <select
+                name="categoryId"
+                value={basic.categoryId || ""}
+                onChange={handleBasicChange}
+                className="select select-bordered w-full"
+              >
+                <option value="">Select Parent Category</option>
+                {categories.map((c) => (
+                  <option key={c.categoryId} value={c.categoryId}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-{subCategories.length > 0 && (
-  <div className="md:col-span-2">
-    <label className="block mb-1 font-medium text-gray-700">Sub-Category</label>
-    <select
-      name="subCategoryId"
-      value={basic.subCategoryId || ""}
-      onChange={handleBasicChange}
-      className="select select-bordered w-full"
-    >
-      <option value="">Select Sub-Category</option>
-      {subCategories.map(sub => (
-        <option key={sub.categoryId} value={sub.categoryId}>{sub.name}</option>
-      ))}
-    </select>
-  </div>
-)}
-
+            {subCategories.length > 0 && (
+              <div className="md:col-span-2">
+                <label className="block mb-1 font-medium text-gray-700">
+                  Sub-Category
+                </label>
+                <select
+                  name="subCategoryId"
+                  value={basic.subCategoryId || ""}
+                  onChange={handleBasicChange}
+                  className="select select-bordered w-full"
+                >
+                  <option value="">Select Sub-Category</option>
+                  {subCategories.map((sub) => (
+                    <option key={sub.categoryId} value={sub.categoryId}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </section>
 
         {/* Images Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Images</h2>
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Images
+          </h2>
 
           <div>
-            <p className="mb-2 font-medium text-gray-700">Existing Images ({existingImages.length})</p>
+            <p className="mb-2 font-medium text-gray-700">
+              Existing Images ({existingImages.length})
+            </p>
             <div className="flex flex-wrap gap-4">
-              {existingImages.map(img => (
-                <div key={img.imageId} className="relative w-24 h-24 rounded overflow-hidden border border-gray-300">
+              {existingImages.map((img) => (
+                <div
+                  key={img.imageId}
+                  className="relative w-24 h-24 rounded overflow-hidden border border-gray-300"
+                >
                   <img
                     src={`https://test.api.dpmsign.com/static/product-images/${img.imageName}`}
                     alt=""
@@ -455,7 +703,9 @@ const payload = {
           </div>
 
           <div>
-            <label className="block mb-2 font-medium text-gray-700">Add New Images ({newImages.length})</label>
+            <label className="block mb-2 font-medium text-gray-700">
+              Add New Images ({newImages.length})
+            </label>
             <input
               type="file"
               multiple
@@ -465,7 +715,10 @@ const payload = {
             />
             <div className="flex flex-wrap gap-4 mt-3">
               {newImages.map((file, i) => (
-                <div key={i} className="relative w-24 h-24 rounded overflow-hidden border border-gray-300">
+                <div
+                  key={i}
+                  className="relative w-24 h-24 rounded overflow-hidden border border-gray-300"
+                >
                   <img
                     src={URL.createObjectURL(file)}
                     alt=""
@@ -487,14 +740,18 @@ const payload = {
 
         {/* Tags Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Tags</h2>
-          {tags.length === 0 && <p className="text-gray-500 mb-2">No tags added yet.</p>}
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Tags
+          </h2>
+          {tags.length === 0 && (
+            <p className="text-gray-500 mb-2">No tags added yet.</p>
+          )}
           {tags.map((t, i) => (
             <div key={i} className="flex items-center gap-3 mb-2">
               <input
                 type="text"
                 value={t}
-                onChange={e => updateTag(i, e.target.value)}
+                onChange={(e) => updateTag(i, e.target.value)}
                 className="input input-bordered flex-grow"
                 placeholder="Tag"
               />
@@ -519,20 +776,24 @@ const payload = {
 
         {/* Attributes Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Attributes</h2>
-          {attributes.length === 0 && <p className="text-gray-500 mb-2">No attributes added yet.</p>}
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Attributes
+          </h2>
+          {attributes.length === 0 && (
+            <p className="text-gray-500 mb-2">No attributes added yet.</p>
+          )}
           {attributes.map((a, i) => (
             <div key={i} className="flex gap-3 mb-2">
               <input
                 placeholder="Property"
                 value={a.property}
-                onChange={e => updateAttr(i, "property", e.target.value)}
+                onChange={(e) => updateAttr(i, "property", e.target.value)}
                 className="input input-bordered flex-1"
               />
               <input
                 placeholder="Description"
                 value={a.description}
-                onChange={e => updateAttr(i, "description", e.target.value)}
+                onChange={(e) => updateAttr(i, "description", e.target.value)}
                 className="input input-bordered flex-1"
               />
               <button
@@ -556,21 +817,28 @@ const payload = {
 
         {/* Variations Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Variations</h2>
-          {variations.length === 0 && <p className="text-gray-500 mb-2">No variations added yet.</p>}
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Variations
+          </h2>
+          {variations.length === 0 && (
+            <p className="text-gray-500 mb-2">No variations added yet.</p>
+          )}
           {variations.map((v, i) => (
-            <div key={i} className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50">
+            <div
+              key={i}
+              className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50"
+            >
               <div className="flex flex-wrap gap-3 items-end mb-3">
                 <input
                   placeholder="Name"
                   value={v.name}
-                  onChange={e => updateVar(i, "name", e.target.value)}
+                  onChange={(e) => updateVar(i, "name", e.target.value)}
                   className="input input-bordered flex-grow min-w-[150px]"
                 />
                 <input
                   placeholder="Unit"
                   value={v.unit}
-                  onChange={e => updateVar(i, "unit", e.target.value)}
+                  onChange={(e) => updateVar(i, "unit", e.target.value)}
                   className="input input-bordered w-36"
                 />
                 <button
@@ -588,7 +856,7 @@ const payload = {
                     <input
                       placeholder="Value"
                       value={vi.value}
-                      onChange={e => updateVarItem(i, j, e.target.value)}
+                      onChange={(e) => updateVarItem(i, j, e.target.value)}
                       className="input input-bordered flex-grow"
                     />
                     <button
@@ -621,16 +889,25 @@ const payload = {
 
         {/* Variants Section */}
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">Variants</h2>
-          {variants.length === 0 && <p className="text-gray-500 mb-2">No variants added yet.</p>}
+          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
+            Variants
+          </h2>
+          {variants.length === 0 && (
+            <p className="text-gray-500 mb-2">No variants added yet.</p>
+          )}
           {variants.map((vt, i) => (
-            <div key={i} className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50">
+            <div
+              key={i}
+              className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50"
+            >
               <div className="flex flex-wrap gap-3 items-end mb-3">
                 <input
                   type="number"
                   placeholder="Additional Price"
                   value={vt.additionalPrice}
-                  onChange={e => updateVt(i, "additionalPrice", e.target.value)}
+                  onChange={(e) =>
+                    updateVt(i, "additionalPrice", e.target.value)
+                  }
                   className="input input-bordered w-40"
                   min={0}
                 />
@@ -646,18 +923,43 @@ const payload = {
                 <label className="block mb-1 font-medium">Details</label>
                 {vt.variantDetails.map((d, j) => (
                   <div key={j} className="flex gap-3 items-center mb-2">
-                    <input
-                      placeholder="Variation Name"
+                    <select
                       value={d.variationName}
-                      onChange={e => updateVtDetail(i, j, "variationName", e.target.value)}
-                      className="input input-bordered flex-grow"
-                    />
-                    <input
-                      placeholder="Item Value"
+                      onChange={(e) =>
+                        updateVtDetail(i, j, "variationName", e.target.value)
+                      }
+                      className="select select-bordered flex-grow"
+                      required
+                    >
+                      <option value="">Select Variation Name</option>
+                      {variations.map((variationOption, idx) => (
+                        <option key={idx} value={variationOption.name}>
+                          {variationOption.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
                       value={d.variationItemValue}
-                      onChange={e => updateVtDetail(i, j, "variationItemValue", e.target.value)}
-                      className="input input-bordered flex-grow"
-                    />
+                      onChange={(e) =>
+                        updateVtDetail(
+                          i,
+                          j,
+                          "variationItemValue",
+                          e.target.value
+                        )
+                      }
+                      className="select select-bordered flex-grow"
+                      required
+                    >
+                      <option value="">Select Item Value</option>
+                      {variations
+                        .find((v) => v.name === d.variationName)
+                        ?.variationItems.map((item, idx) => (
+                          <option key={idx} value={item.value}>
+                            {item.value}
+                          </option>
+                        ))}
+                    </select>
                     <button
                       type="button"
                       onClick={() => removeVtDetail(i, j)}
@@ -691,7 +993,9 @@ const payload = {
           type="submit"
           disabled={submitting}
           className={`btn btn-primary w-full py-3 text-lg font-semibold transition ${
-            submitting ? "opacity-70 cursor-not-allowed" : "hover:bg-primary-focus"
+            submitting
+              ? "opacity-70 cursor-not-allowed"
+              : "hover:bg-primary-focus"
           }`}
         >
           {submitting ? "Updating..." : "Update Product"}

@@ -44,10 +44,9 @@ export default function POSDashboard() {
   const selectedCustomer = customers.find(
     (c) => c.customerId === Number(selectedCustomerId)
   );
-const selectedStaff = staffs.find(
-  (s) => s.staffId === Number(selectedStaffId)
-);
-
+  const selectedStaff = staffs.find(
+    (s) => s.staffId === Number(selectedStaffId)
+  );
 
   // --- START: User Data and Staff ID Logic ---
   // Re-introducing userData parsing for role check
@@ -81,7 +80,7 @@ const selectedStaff = staffs.find(
       // Line 70: CRITICAL FIX: Change res.data.data.staffs to res.data.data.staff
       if (res.data && res.data.data && Array.isArray(res.data.data.staff)) {
         setStaffs(res.data.data.staff); // <--- Changed from .staffs to .staff
-        console.log("Staffs set in state:", res.data.data.staff); // Confirm data set
+        //console.log("Staffs set in state:", res.data.data.staff); // Confirm data set
       } else {
         console.warn("Staffs data is not an array or missing:", res.data);
         setStaffs([]); // Ensure it's an empty array if data is malformed
@@ -128,10 +127,23 @@ const selectedStaff = staffs.find(
 
   // Fetching
   const fetchProducts = async () => {
-    const res = await axios.get("https://test.api.dpmsign.com/api/product", {
-      params: { categoryId: filters.categoryId },
-    });
-    setProducts(res.data.data.products);
+    try {
+      const res = await axios.get("https://test.api.dpmsign.com/api/product", {
+        params: {
+          categoryId: filters.categoryId,
+          // REMOVE THIS LINE: isActive: true, // This is causing the 400 Bad Request
+        },
+      });
+
+      // Add client-side filtering here
+      const activeProducts = res.data.data.products.filter(
+        (product) => product.isActive === true
+      );
+      setProducts(activeProducts); // Set only active products to state
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      Swal.fire("Error", "Failed to load products.", "error");
+    }
   };
 
   const fetchCategories = async () => {
@@ -251,7 +263,6 @@ const selectedStaff = staffs.find(
     const selectedStaff = staffs.find(
       (s) => s.staffId === Number(selectedStaffId)
     );
-    
 
     if (!selectedCustomer || selectedItems.length === 0) {
       Swal.fire("Error", "Missing customer or products", "error");
@@ -326,8 +337,6 @@ const selectedStaff = staffs.find(
           couponDiscount,
           newOrderId,
           staffName: isAdmin ? "N/A" : selectedStaff?.name || "N/A",
-         
-          
         });
         setTriggerInvoiceGenerate(true);
         setSelectedItems([]);
@@ -357,10 +366,10 @@ const selectedStaff = staffs.find(
     fetchCustomers();
     // Line 345: Only fetch staffs if the user is NOT an admin
     if (!isAdmin) {
-      console.log("User is NOT admin, fetching staffs..."); // Debugging call
+      //console.log("User is NOT admin, fetching staffs..."); // Debugging call
       fetchStaffs();
     } else {
-      console.log("User is admin, skipping staff fetch."); // Debugging call
+      //console.log("User is admin, skipping staff fetch."); // Debugging call
     }
   }, [isAdmin]); // Re-run if isAdmin changes (e.g., after login/logout)
 
@@ -409,8 +418,6 @@ const selectedStaff = staffs.find(
           <p className="mb-3 italic text-gray-500">No customer selected</p>
         )}
 
-      
-
         {/* ✅ Staff Info 
 {selectedStaff && (
   <div className="bg-gray-100 p-3 rounded mb-3 shadow">
@@ -418,8 +425,6 @@ const selectedStaff = staffs.find(
     <p><strong>Staff Phone:</strong> {selectedStaff.phone}</p>
   </div>
 )} */}
-
-        
 
         <CustomerSelector
           customers={customers}
@@ -431,7 +436,7 @@ const selectedStaff = staffs.find(
           triggerModalOpen={openCustomerModal}
         />
 
-          <div className="flex justify-end my-3">
+        <div className="flex justify-end my-3">
           <button onClick={handleOpenCustomerModal} className="btn btn-outline">
             ➕ Add Customer
           </button>

@@ -42,7 +42,9 @@ export default function ProductList() {
 
   const fetchCategories = async () => {
     try {
-      const res = await axios.get("https://test.api.dpmsign.com/api/product-category");
+      const res = await axios.get(
+        "https://test.api.dpmsign.com/api/product-category"
+      );
       setCategories(res.data.data.categories || []);
     } catch (err) {
       console.error(err);
@@ -74,10 +76,14 @@ export default function ProductList() {
         sorted.sort((a, b) => a.name.localeCompare(b.name));
         break;
       case "priceLow":
-        sorted.sort((a, b) => parseFloat(a.basePrice) - parseFloat(b.basePrice));
+        sorted.sort(
+          (a, b) => parseFloat(a.basePrice) - parseFloat(b.basePrice)
+        );
         break;
       case "priceHigh":
-        sorted.sort((a, b) => parseFloat(b.basePrice) - parseFloat(a.basePrice));
+        sorted.sort(
+          (a, b) => parseFloat(b.basePrice) - parseFloat(a.basePrice)
+        );
         break;
       case "oldest":
         sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -92,43 +98,42 @@ export default function ProductList() {
     setFilteredProducts(sorted);
   };
 
-const handleStatusUpdate = async (productId, makeActive) => {
-  const id = Number(productId);
-  if (isNaN(id)) {
-    Swal.fire("Error!", "Product ID must be a valid number.", "error");
-    return;
-  }
+  const handleStatusUpdate = async (productId, makeActive) => {
+    const id = Number(productId);
+    if (isNaN(id)) {
+      Swal.fire("Error!", "Product ID must be a valid number.", "error");
+      return;
+    }
 
-  const url = `https://test.api.dpmsign.com/api/product/status`;
+    const url = `https://test.api.dpmsign.com/api/product/status`;
 
-  try {
-    await axios.put(
-      url,
-      { productId: id, isActive: makeActive },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    try {
+      await axios.put(
+        url,
+        { productId: id, isActive: makeActive },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-    Swal.fire(
-      "Success!",
-      `Product marked as ${makeActive ? "Active" : "Inactive"}.`,
-      "success"
-    );
+      Swal.fire(
+        "Success!",
+        `Product marked as ${makeActive ? "Active" : "Inactive"}.`,
+        "success"
+      );
 
-    fetchProducts();
-  } catch (error) {
-    Swal.fire(
-      "Error!",
-      error.response?.data?.message || "Failed to update status.",
-      "error"
-    );
-  }
-};
-
+      fetchProducts();
+    } catch (error) {
+      Swal.fire(
+        "Error!",
+        error.response?.data?.message || "Failed to update status.",
+        "error"
+      );
+    }
+  };
 
   const handleDeleteProduct = async (productId) => {
     try {
@@ -143,9 +148,12 @@ const handleStatusUpdate = async (productId, makeActive) => {
       });
 
       if (result.isConfirmed) {
-        await axios.delete(`https://test.api.dpmsign.com/api/product/${productId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        await axios.delete(
+          `https://test.api.dpmsign.com/api/product/${productId}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
 
         Swal.fire("Deleted!", "Product has been deleted.", "success");
         fetchProducts();
@@ -178,7 +186,9 @@ const handleStatusUpdate = async (productId, makeActive) => {
       <div className="mb-4 flex justify-between border-b-2 pb-8">
         <div>
           <h2 className="text-2xl font-bold">Products</h2>
-          <p className="text-gray-500">All products of your store in one place!</p>
+          <p className="text-gray-500">
+            All products of your store in one place!
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <input
@@ -267,8 +277,11 @@ const handleStatusUpdate = async (productId, makeActive) => {
                 <td>
                   <img
                     src={
-                      item.images?.[0]?.imageName
-                        ? `https://test.api.dpmsign.com/static/product-images/${item.images[0].imageName}`
+                      // Corrected path to use /static/ as the URL prefix
+                      item.images &&
+                      item.images.length > 0 &&
+                      item.images[0].imageName
+                        ? `https://test.api.dpmsign.com/static/product-images/${item.images[0].imageName}` // Use /static/ in the URL
                         : "/no-image.png"
                     }
                     alt="product"
@@ -282,32 +295,44 @@ const handleStatusUpdate = async (productId, makeActive) => {
                 <td>{item.pricingType}</td>
                 <td>{getCategoryName(item.categoryId)}</td>
                 <td>
-  <div className="dropdown dropdown-bottom dropdown-hover">
-    <label tabIndex={0} className={`btn btn-xs ${item.isActive ? "btn-success" : "btn-error"}`}>
-      {item.isActive ? "Active" : "Inactive"}
-    </label>
-    <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-28 text-sm">
-      <li>
-        <button
-          className="text-green-600"
-          onClick={() => handleStatusUpdate(item.productId, true)}
-          disabled={item.isActive}
-        >
-          ✅ Active
-        </button>
-      </li>
-      <li>
-        <button
-          className="text-red-600"
-          onClick={() => handleStatusUpdate(item.productId, false)}
-          disabled={!item.isActive}
-        >
-          ❌ Inactive
-        </button>
-      </li>
-    </ul>
-  </div>
-</td>
+                  <div className="dropdown dropdown-bottom dropdown-hover">
+                    <label
+                      tabIndex={0}
+                      className={`btn btn-xs ${
+                        item.isActive ? "btn-success" : "btn-error"
+                      }`}
+                    >
+                      {item.isActive ? "Active" : "Inactive"}
+                    </label>
+                    <ul
+                      tabIndex={0}
+                      className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-28 text-sm"
+                    >
+                      <li>
+                        <button
+                          className="text-green-600"
+                          onClick={() =>
+                            handleStatusUpdate(item.productId, true)
+                          }
+                          disabled={item.isActive}
+                        >
+                          ✅ Active
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          className="text-red-600"
+                          onClick={() =>
+                            handleStatusUpdate(item.productId, false)
+                          }
+                          disabled={!item.isActive}
+                        >
+                          ❌ Inactive
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                </td>
 
                 <td>{new Date(item.createdAt).toLocaleDateString("en-GB")}</td>
                 <td>
@@ -323,17 +348,22 @@ const handleStatusUpdate = async (productId, makeActive) => {
                         <button
                           className="flex items-center gap-2"
                           onClick={() =>
-                            navigate(`/products/product-details/${item.productId}`)
+                            navigate(
+                              `/products/product-details/${item.productId}`
+                            )
                           }
                         >
                           <FaSearch /> View
                         </button>
                       </li>
                       <li>
-                        <button className="flex items-center gap-2"
-                        onClick={() =>
-                            navigate(`/products/product-update/${item.productId}`)
-                        }
+                        <button
+                          className="flex items-center gap-2"
+                          onClick={() =>
+                            navigate(
+                              `/products/product-update/${item.productId}`
+                            )
+                          }
                         >
                           <FaEdit /> Edit
                         </button>
