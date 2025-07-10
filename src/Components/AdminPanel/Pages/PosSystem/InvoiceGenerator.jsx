@@ -74,10 +74,9 @@ const InvoicePDF = ({
   grossTotal,
   couponDiscount,
   newOrderId,
-  selectedStaffName,
-  staffName // 🟢 নতুন প্রপ
+  selectedStaffName, // This prop seems unused, 'staffName' is the one being used below
+  staffName,
 }) => (
-
   <Document>
     <Page size="A4" style={styles.page}>
       {/* Header */}
@@ -87,14 +86,13 @@ const InvoicePDF = ({
           <Text>Order ID: #{newOrderId}</Text>
           <Text>Date: {new Date().toLocaleDateString()}</Text>
         </View>
-       
+
         <View style={{ marginTop: 10 }}>
-  <Text>Customer: {selectedCustomer.name} ({selectedCustomer.phone})</Text>
-  <Text>Staff: {staffName || "N/A"}</Text>
-
-
-</View>
-
+          <Text>
+            Customer: {selectedCustomer.name} ({selectedCustomer.phone})
+          </Text>
+          <Text>Staff: {staffName || "N/A"}</Text>
+        </View>
       </View>
 
       {/* Order Items */}
@@ -103,7 +101,8 @@ const InvoicePDF = ({
         <View style={styles.tableHeader}>
           <Text style={styles.cell}>Product</Text>
           <Text style={styles.cell}>Qty</Text>
-          <Text style={styles.cell}>Unit Price</Text>
+          <Text style={styles.cell}>Unit Price</Text>{" "}
+          {/* Clarified "Unit Price" here if it's the customUnitPrice (base + variant additional) */}
           <Text style={styles.amountRight}>Total</Text>
         </View>
         {selectedItems.map((item, index) => (
@@ -111,10 +110,22 @@ const InvoicePDF = ({
             <Text style={styles.cell}>{item.name}</Text>
             <Text style={styles.cell}>{item.quantity}</Text>
             <Text style={styles.cell}>
+              {/* Display customUnitPrice which is base + variant additional price */}
               {Number(item.customUnitPrice).toFixed(2)} Tk
+              {item.pricingType === "square-feet" &&
+                item.widthInch &&
+                item.heightInch && (
+                  <Text style={{ fontSize: 8 }}>
+                    {` (${(
+                      (item.widthInch / 12) *
+                      (item.heightInch / 12)
+                    ).toFixed(2)} sq.ft)`}
+                  </Text>
+                )}
             </Text>
             <Text style={styles.amountRight}>
-              {(item.customUnitPrice * item.quantity).toFixed(2)} Tk
+              {/* MODIFIED: Use item.calculatedItemTotal directly for the final total of this line item */}
+              {Number(item.calculatedItemTotal).toFixed(2)} Tk
             </Text>
           </View>
         ))}
@@ -125,18 +136,24 @@ const InvoicePDF = ({
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Subtotal:</Text>
           <Text style={styles.totalValue}>
-            {(grossTotal + couponDiscount).toFixed(2)} Tk
+            {/* Subtotal should sum up calculatedItemTotal of all items */}
+            {selectedItems
+              .reduce((sum, item) => sum + Number(item.calculatedItemTotal), 0)
+              .toFixed(2)}{" "}
+            Tk
           </Text>
         </View>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Discount:</Text>
           <Text style={styles.totalValue}>
+            {/* couponDiscount is currently 0, but this line is for actual coupon discount */}
             {couponDiscount.toFixed(2)} Tk
           </Text>
         </View>
         <View style={styles.totalRow}>
           <Text style={[styles.totalLabel, { fontSize: 12 }]}>Total:</Text>
           <Text style={[styles.totalValue, { fontSize: 12 }]}>
+            {/* grossTotal should be the final sum of all calculatedItemTotal values */}
             {grossTotal.toFixed(2)} Tk
           </Text>
         </View>
@@ -144,7 +161,6 @@ const InvoicePDF = ({
     </Page>
   </Document>
 );
-
 
 // Generator Component
 const InvoiceGenerator = ({
@@ -161,16 +177,15 @@ const InvoiceGenerator = ({
   useEffect(() => {
     const generateAndDownload = async () => {
       const blob = await pdf(
-       <InvoicePDF
-  orderData={orderData}
-  selectedCustomer={selectedCustomer}
-  selectedItems={selectedItems}
-  grossTotal={grossTotal}
-  couponDiscount={couponDiscount}
-  newOrderId={newOrderId}
-  staffName={staffName}
-/>
-
+        <InvoicePDF
+          orderData={orderData}
+          selectedCustomer={selectedCustomer}
+          selectedItems={selectedItems}
+          grossTotal={grossTotal}
+          couponDiscount={couponDiscount}
+          newOrderId={newOrderId}
+          staffName={staffName}
+        />
       ).toBlob();
 
       const url = URL.createObjectURL(blob);

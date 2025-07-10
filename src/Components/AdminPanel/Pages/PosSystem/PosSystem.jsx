@@ -10,6 +10,7 @@ import CouponInput from "./CouponInput";
 import OrderTotals from "./OrderTotals";
 import InvoiceGenerator from "./InvoiceGenerator";
 import StaffSelector from "./StaffSelector";
+import ProductDetailsModal from "./ProductDetailsModal";
 
 export default function POSDashboard() {
   // State
@@ -21,13 +22,13 @@ export default function POSDashboard() {
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [searchText, setSearchText] = useState("");
 
-  const [staffs, setStaffs] = useState([]); // To store the list of all staffs
-  const [selectedStaffId, setSelectedStaffId] = useState(null); // The manually selected staff ID
+  const [staffs, setStaffs] = useState([]);
+  const [selectedStaffId, setSelectedStaffId] = useState(null);
 
-  const [couponCode, setCouponCode] = useState("");
-  const [couponDiscount, setCouponDiscount] = useState(0);
-  const [couponError, setCouponError] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  // const [couponCode, setCouponCode] = useState("");
+  // const [couponDiscount, setCouponDiscount] = useState(0);
+  // const [couponError, setCouponError] = useState("");
+  // const [appliedCoupon, setAppliedCoupon] = useState(null);
 
   const [paymentMethod, setPaymentMethod] = useState("cod-payment");
   const [deliveryMethod, setDeliveryMethod] = useState("shop-pickup");
@@ -35,12 +36,16 @@ export default function POSDashboard() {
 
   const [selectedCourierId, setSelectedCourierId] = useState(null);
   const [courierAddressInput, setCourierAddressInput] = useState("");
+  const [notesInput, setNotesInput] = useState("");
 
   const [nextOrderId, setNextOrderId] = useState(null);
   const [triggerInvoiceGenerate, setTriggerInvoiceGenerate] = useState(false);
   const [invoiceData, setInvoiceData] = useState(null);
 
-  // নতুন: select করা customer এর object খুঁজে নিচ্ছি
+  // NEW STATE FOR PRODUCT DETAILS MODAL
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [selectedProductForModal, setSelectedProductForModal] = useState(null);
+
   const selectedCustomer = customers.find(
     (c) => c.customerId === Number(selectedCustomerId)
   );
@@ -48,8 +53,6 @@ export default function POSDashboard() {
     (s) => s.staffId === Number(selectedStaffId)
   );
 
-  // --- START: User Data and Staff ID Logic ---
-  // Re-introducing userData parsing for role check
   let userData = null;
   try {
     const raw = localStorage.getItem("userData");
@@ -58,32 +61,23 @@ export default function POSDashboard() {
     }
   } catch (e) {
     console.error("Invalid userData in localStorage:", e);
-    localStorage.removeItem("userData"); // future protection
+    localStorage.removeItem("userData");
   }
 
-  // Determine if the logged-in user is an admin
   const isAdmin = userData?.role === "admin";
-  // Line 60: Debugging isAdmin status
-  //console.log("Is Admin:", isAdmin, "User Data Role:", userData?.role);
-  // --- END: User Data and Staff ID Logic ---
 
-  // fetching staffs
   const fetchStaffs = async () => {
     try {
       const token = localStorage.getItem("authToken");
-      //console.log("Fetching staffs with token:", token); // Debugging token
       const res = await axios.get("https://test.api.dpmsign.com/api/staff", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      //console.log("Fetched Staffs Response:", res.data); // Keep this log for verification
 
-      // Line 70: CRITICAL FIX: Change res.data.data.staffs to res.data.data.staff
       if (res.data && res.data.data && Array.isArray(res.data.data.staff)) {
-        setStaffs(res.data.data.staff); // <--- Changed from .staffs to .staff
-        //console.log("Staffs set in state:", res.data.data.staff); // Confirm data set
+        setStaffs(res.data.data.staff);
       } else {
         console.warn("Staffs data is not an array or missing:", res.data);
-        setStaffs([]); // Ensure it's an empty array if data is malformed
+        setStaffs([]);
       }
     } catch (err) {
       console.error(
@@ -94,52 +88,68 @@ export default function POSDashboard() {
     }
   };
 
-  // নতুন function, selected customer unselect করার জন্য
   const handleUnselectCustomer = () => {
     setSelectedCustomerId(null);
   };
 
-  // POSDashboard.jsx
   const [openCustomerModal, setOpenCustomerModal] = useState(false);
 
   const handleOpenCustomerModal = () => {
-    setOpenCustomerModal(false); // 👈 প্রথমে false করে reset করি
+    setOpenCustomerModal(false);
     setTimeout(() => {
-      setOpenCustomerModal(true); // 👈 তারপর আবার true করে trigger দিই
+      setOpenCustomerModal(true);
     }, 50);
   };
 
+  // MODIFIED: calculateItemTotal will use the 'calculatedItemTotal' passed from the modal
+  // or re-calculate based on customUnitPrice and new quantity/dimensions if changed in OrderSummary
   const calculateItemTotal = useCallback((item) => {
-    const price = Number(item.customUnitPrice || 0);
-    const quantity = Number(item.quantity || 0);
-    if (item.pricingType === "square-feet") {
-      const area = (item.widthInch || 0) * (item.heightInch || 0);
-      return price * quantity * area;
+    // If the item comes directly from the modal, it will have 'calculatedItemTotal'
+    // This `calculatedItemTotal` already includes all discounts and variant prices from the modal.
+    // Use this as the primary source for the item's total.
+    if (
+      item.calculatedItemTotal !== undefined &&
+      item.calculatedItemTotal !== null
+    ) {
+      return item.calculatedItemTotal;
     }
-    return price * quantity;
+
+    // Otherwise, recalculate if inputs were changed in OrderSummary.
+    // The `customUnitPrice` should reflect the price per unit/sqft *after* variant additions.
+    const pricePerUnitOrSqFt = Number(
+      item.customUnitPrice || item.basePrice || 0
+    );
+    const quantity = Number(item.quantity || 0);
+
+    if (
+      item.pricingType === "square-feet" &&
+      item.widthInch &&
+      item.heightInch
+    ) {
+      const area = (item.widthInch / 12) * (item.heightInch / 12);
+      return pricePerUnitOrSqFt * quantity * area;
+    }
+    return pricePerUnitOrSqFt * quantity;
   }, []);
 
   const subTotal = selectedItems.reduce(
     (sum, item) => sum + calculateItemTotal(item),
     0
   );
-  const grossTotal = Math.max(subTotal - couponDiscount, 0);
+  const grossTotal = Math.max(subTotal - 0, 0); // Assuming no couponDiscount for now
 
-  // Fetching
   const fetchProducts = async () => {
     try {
       const res = await axios.get("https://test.api.dpmsign.com/api/product", {
         params: {
           categoryId: filters.categoryId,
-          // REMOVE THIS LINE: isActive: true, // This is causing the 400 Bad Request
         },
       });
 
-      // Add client-side filtering here
       const activeProducts = res.data.data.products.filter(
         (product) => product.isActive === true
       );
-      setProducts(activeProducts); // Set only active products to state
+      setProducts(activeProducts);
     } catch (error) {
       console.error("Error fetching products:", error);
       Swal.fire("Error", "Failed to load products.", "error");
@@ -170,29 +180,30 @@ export default function POSDashboard() {
     setNextOrderId(maxId + 1);
   };
 
-  // Actions
-  const applyCoupon = async () => {
-    if (!couponCode.trim()) return setCouponError("Enter a coupon code");
-    try {
-      const res = await axios.get(
-        `https://test.api.dpmsign.com/api/coupon?code=${couponCode.trim()}`
-      );
-      const discount = res.data.data.totalPrice - res.data.data.discountedPrice;
-      setCouponDiscount(discount);
-      setAppliedCoupon(res.data.data.coupon);
-      setCouponError("");
-    } catch {
-      setCouponError("Invalid or expired coupon");
-      setCouponDiscount(0);
-      setAppliedCoupon(null);
-    }
-  };
-
   const updateItemField = (productId, field, value) => {
     setSelectedItems((prev) =>
-      prev.map((item) =>
-        item.productId === productId ? { ...item, [field]: value } : item
-      )
+      prev.map((item) => {
+        if (item.productId === productId) {
+          const updatedItem = { ...item, [field]: value };
+
+          // When any relevant field changes in OrderSummary, re-calculate the item total.
+          // This recalculation should use the item's current `customUnitPrice` (which
+          // includes the base price and selected variant's additional price).
+          // The discount calculation is NOT re-applied here, as that's complex and handled
+          // by the modal when initially adding the item. `calculatedItemTotal` should reflect that final price.
+          if (
+            field === "quantity" ||
+            field === "widthInch" ||
+            field === "heightInch" ||
+            field === "customUnitPrice" // if customUnitPrice is manually changed
+          ) {
+            // Recalculate based on updated quantity/dimensions and current effective unit price (customUnitPrice)
+            updatedItem.calculatedItemTotal = calculateItemTotal(updatedItem);
+          }
+          return updatedItem;
+        }
+        return item;
+      })
     );
   };
 
@@ -221,19 +232,33 @@ export default function POSDashboard() {
         const selected = item.availableVariants?.find(
           (v) => v.productVariantId === selectedOption?.value
         );
-        return {
+        // When variant changes, update additional price and customUnitPrice
+        const newCustomUnitPrice =
+          Number(
+            item.basePrice || 0 // Start with base price
+          ) + Number(selected?.additionalPrice ?? 0); // Add variant's additional price
+
+        const updatedItem = {
           ...item,
           productVariantId: selectedOption?.value || null,
-          selectedVariantDetails: selected || null,
-          customUnitPrice: selected?.additionalPrice ?? item.basePrice,
+          selectedVariantDetails:
+            selected?.variantDetails.map((detail) => ({
+              variationName: detail.variationItem?.variation?.name,
+              variationItemValue: detail.variationItem?.value,
+            })) || null, // Update variant details
+          customUnitPrice: newCustomUnitPrice,
         };
+
+        // Recalculate item total based on new customUnitPrice
+        updatedItem.calculatedItemTotal = calculateItemTotal(updatedItem);
+
+        return updatedItem;
       })
     );
   };
 
   const [couriers, setCouriers] = useState([]);
 
-  // Function to fetch couriers
   const fetchCouriers = async () => {
     try {
       const token = localStorage.getItem("authToken");
@@ -246,11 +271,71 @@ export default function POSDashboard() {
     }
   };
 
-  // Call this function inside useEffect
   useEffect(() => {
     fetchCouriers();
   }, []);
-  const [notesInput, setNotesInput] = useState(""); // State to hold additional notes
+
+  // NEW HANDLER FOR PRODUCT CLICK (TO OPEN MODAL)
+  const handleProductClickForModal = useCallback((product) => {
+    setSelectedProductForModal(product);
+    setIsProductModalOpen(true);
+  }, []);
+
+  // NEW HANDLER TO ADD ITEM FROM MODAL TO SELECTED ITEMS
+  const handleAddItemFromModal = useCallback((itemToAdd) => {
+    setSelectedItems((prev) => {
+      // For square-feet products, you might want to allow multiple instances
+      // if dimensions are different, even if it's the same product ID.
+      // For flat products, if quantity is just being updated, increment it.
+      // IMPORTANT: The `calculatedItemTotal` and `customUnitPrice` from the modal
+      // should be preserved, as they already reflect the full calculation including discount.
+
+      const existingItemIndex = prev.findIndex(
+        (item) =>
+          item.productId === itemToAdd.productId &&
+          item.widthInch === itemToAdd.widthInch && // Important for square-feet uniqueness
+          item.heightInch === itemToAdd.heightInch && // Important for square-feet uniqueness
+          item.productVariantId === itemToAdd.productVariantId // Important for variant uniqueness
+      );
+
+      if (existingItemIndex !== -1 && itemToAdd.pricingType !== "square-feet") {
+        // If existing and not square-feet (which might need unique entries per dimension), update quantity
+        // For flat products, sum up quantities and calculate new total.
+        const updated = [...prev];
+        const existing = updated[existingItemIndex];
+
+        // Recalculate combined total
+        const newTotalQuantity = existing.quantity + itemToAdd.quantity;
+        let newCalculatedItemTotal;
+
+        // If the customUnitPrice is consistent, recalculate total based on new quantity.
+        // Otherwise, it implies different pricing, so maybe it should be a new line item.
+        // For simplicity, if unit prices are different on re-add, create new item.
+        // If unit prices are the same, combine quantities and recalculate total.
+        if (existing.customUnitPrice === itemToAdd.customUnitPrice) {
+          newCalculatedItemTotal = itemToAdd.customUnitPrice * newTotalQuantity;
+        } else {
+          // If unit price changed somehow for the "same" flat product, add as new line or merge smartly
+          // For now, let's just add the new item total. A more complex system might average or pick one.
+          newCalculatedItemTotal =
+            existing.calculatedItemTotal + itemToAdd.calculatedItemTotal;
+        }
+
+        updated[existingItemIndex] = {
+          ...existing,
+          quantity: newTotalQuantity,
+          // customUnitPrice should remain the same as they are considered "same" flat product
+          calculatedItemTotal: newCalculatedItemTotal,
+        };
+        return updated;
+      } else {
+        // Otherwise, add new item (either truly new, or a square-feet product with new dimensions/variant)
+        return [...prev, itemToAdd];
+      }
+    });
+    setIsProductModalOpen(false); // Close the modal
+    setSelectedProductForModal(null); // Clear the selected product
+  }, []);
 
   const handleSaveOrder = async () => {
     const token = localStorage.getItem("authToken");
@@ -258,8 +343,6 @@ export default function POSDashboard() {
       (c) => c.customerId === Number(selectedCustomerId)
     );
 
-    // Find the selected staff object for displaying the name
-    // This will be used for invoice data if a staff is selected
     const selectedStaff = staffs.find(
       (s) => s.staffId === Number(selectedStaffId)
     );
@@ -269,12 +352,10 @@ export default function POSDashboard() {
       return;
     }
 
-    // Determine staffId to send based on admin role or manual selection
     let staffIdToSend = null;
     if (isAdmin) {
-      staffIdToSend = null; // Admins don't need to specify staffId
+      staffIdToSend = null;
     } else {
-      // For non-admin users, staffId is required and must be selected
       if (!selectedStaffId) {
         Swal.fire(
           "Error",
@@ -291,7 +372,7 @@ export default function POSDashboard() {
       customerName: selectedCustomer.name,
       customerEmail: selectedCustomer.email || "",
       customerPhone: selectedCustomer.phone,
-      staffId: staffIdToSend, // Use the determined staffId
+      staffId: staffIdToSend,
       method: paymentMethod === "online-payment" ? "online" : "offline",
       status: "order-request-received",
       currentStatus: "order-request-received",
@@ -299,15 +380,12 @@ export default function POSDashboard() {
       paymentStatus,
       deliveryMethod,
       billingAddress: selectedCustomer.billingAddress || "",
-      deliveryDate: new Date().toISOString().split("T")[0], // e.g. 2025-07-02
+      deliveryDate: new Date().toISOString().split("T")[0],
 
-      // Courier and address support
       courierId: deliveryMethod === "courier" ? selectedCourierId : null,
       courierAddress: deliveryMethod === "courier" ? courierAddressInput : null,
 
-      additionalNotes: notesInput || "", // Added this
-
-      couponId: appliedCoupon?.couponId || null,
+      additionalNotes: notesInput || "",
 
       orderItems: selectedItems.map((item) => ({
         productId: item.productId,
@@ -315,7 +393,10 @@ export default function POSDashboard() {
         quantity: item.quantity,
         widthInch: item.widthInch || null,
         heightInch: item.heightInch || null,
-        price: Number(item.customUnitPrice),
+        // The 'price' sent to the backend should be the effective unit price after variant additions.
+        // The total order price will be summed up on the backend.
+        // Do NOT send `calculatedItemTotal` as `price` if backend expects unit price.
+        price: Number(item.customUnitPrice), // customUnitPrice holds the (base + variant additional) price per unit/sqft
       })),
     };
 
@@ -332,18 +413,15 @@ export default function POSDashboard() {
         setInvoiceData({
           orderData,
           selectedCustomer,
-          selectedItems,
+          selectedItems, // Pass selectedItems to invoice for details
           grossTotal,
-          couponDiscount,
           newOrderId,
           staffName: isAdmin ? "N/A" : selectedStaff?.name || "N/A",
         });
         setTriggerInvoiceGenerate(true);
         setSelectedItems([]);
         setSelectedCustomerId(null);
-        setSelectedStaffId(null); // Reset selected staff after order
-        setCouponCode("");
-        setCouponDiscount(0);
+        setSelectedStaffId(null);
         fetchNextOrderId();
         Swal.fire("Success", "Order created", "success");
       }
@@ -352,7 +430,7 @@ export default function POSDashboard() {
         "Save order error response:",
         err.response?.data || err.message
       );
-      Swal.fire("Error", "Failed to create order", "error"); // এখানে icon string দেওয়া হয়েছে
+      Swal.fire("Error", "Failed to create order", "error");
     }
   };
 
@@ -364,14 +442,10 @@ export default function POSDashboard() {
   useEffect(() => {
     fetchNextOrderId();
     fetchCustomers();
-    // Line 345: Only fetch staffs if the user is NOT an admin
     if (!isAdmin) {
-      //console.log("User is NOT admin, fetching staffs..."); // Debugging call
       fetchStaffs();
-    } else {
-      //console.log("User is admin, skipping staff fetch."); // Debugging call
     }
-  }, [isAdmin]); // Re-run if isAdmin changes (e.g., after login/logout)
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchCategories();
@@ -386,16 +460,14 @@ export default function POSDashboard() {
           categories={categories}
           filters={filters}
           setFilters={setFilters}
-          selectedItems={selectedItems}
-          setSelectedItems={setSelectedItems}
           searchText={searchText}
           setSearchText={setSearchText}
+          onProductClick={handleProductClickForModal} // PASS THE NEW HANDLER
         />
       </div>
       <div className="col-span-7 p-4 flex flex-col">
         <p className="text-sm font-bold mb-2">Order No: #{nextOrderId}</p>
 
-        {/* Customer Info Display with unselect button */}
         {selectedCustomer ? (
           <div className="flex items-center justify-between bg-gray-100 p-3 rounded mb-3 shadow">
             <div>
@@ -418,14 +490,6 @@ export default function POSDashboard() {
           <p className="mb-3 italic text-gray-500">No customer selected</p>
         )}
 
-        {/* ✅ Staff Info 
-{selectedStaff && (
-  <div className="bg-gray-100 p-3 rounded mb-3 shadow">
-    <p><strong>Staff Name:</strong> {selectedStaff.name}</p>
-    <p><strong>Staff Phone:</strong> {selectedStaff.phone}</p>
-  </div>
-)} */}
-
         <CustomerSelector
           customers={customers}
           selectedCustomerId={selectedCustomerId}
@@ -442,9 +506,7 @@ export default function POSDashboard() {
           </button>
         </div>
 
-        {/* Line 407: Conditionally render Staff Selector if not an admin */}
         {!isAdmin && (
-          // Using the StaffSelector component here
           <StaffSelector
             staffs={staffs}
             selectedStaffId={selectedStaffId}
@@ -462,6 +524,7 @@ export default function POSDashboard() {
           calculateItemTotal={calculateItemTotal}
         />
 
+        {/* CouponInput remains commented out as per your original code */}
         {/* <CouponInput
           couponCode={couponCode}
           setCouponCode={setCouponCode}
@@ -472,7 +535,7 @@ export default function POSDashboard() {
         <hr />
         <OrderTotals
           subTotal={subTotal}
-          couponDiscount={couponDiscount}
+          couponDiscount={0} // Pass 0 as coupon is commented out
           grossTotal={grossTotal}
           paymentMethod={paymentMethod}
           setPaymentMethod={setPaymentMethod}
@@ -485,8 +548,8 @@ export default function POSDashboard() {
           setSelectedCourierId={setSelectedCourierId}
           courierAddressInput={courierAddressInput}
           setCourierAddressInput={setCourierAddressInput}
-          notesInput={notesInput} // Pass notesInput to OrderTotals
-          setNotesInput={setNotesInput} // Pass setNotesInput to OrderTotals
+          notesInput={notesInput}
+          setNotesInput={setNotesInput}
         />
 
         <div className="mt-4">
@@ -506,6 +569,14 @@ export default function POSDashboard() {
             staffName={invoiceData.staffName}
           />
         )}
+
+        {/* RENDER THE NEW PRODUCT DETAILS MODAL */}
+        <ProductDetailsModal
+          isOpen={isProductModalOpen}
+          onRequestClose={() => setIsProductModalOpen(false)}
+          product={selectedProductForModal}
+          onAddItemToOrder={handleAddItemFromModal}
+        />
       </div>
     </div>
   );

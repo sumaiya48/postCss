@@ -22,7 +22,7 @@ export default function UpdateProduct() {
     minOrderQuantity: "",
     discountStart: null,
     discountEnd: null,
-    discountPercentage: null,
+    // REMOVED: discountPercentage: null,
     maxDiscountPercentage: null,
     pricingType: "flat",
     isActive: true,
@@ -77,7 +77,7 @@ export default function UpdateProduct() {
         isActive: p.isActive,
         discountStart: p.discountStart,
         discountEnd: p.discountEnd,
-        discountPercentage: p.discountPercentage,
+        // REMOVED: discountPercentage: p.discountPercentage,
         maxDiscountPercentage: p.maxDiscountPercentage,
         categoryId: p.categoryId || "",
         sku: p.sku || "",
@@ -350,12 +350,13 @@ export default function UpdateProduct() {
           ? Number(basic.discountEnd)
           : ""
       );
-      formData.append(
-        "discountPercentage",
-        basic.discountPercentage !== null && basic.discountPercentage !== ""
-          ? Number(basic.discountPercentage)
-          : ""
-      );
+      // REMOVED: discountPercentage from payload
+      // formData.append(
+      //   "discountPercentage",
+      //   basic.discountPercentage !== null && basic.discountPercentage !== ""
+      //     ? Number(basic.discountPercentage)
+      //     : ""
+      // );
       formData.append(
         "maxDiscountPercentage",
         basic.maxDiscountPercentage !== null &&
@@ -563,6 +564,8 @@ export default function UpdateProduct() {
                 placeholder="Enter discount end amount"
               />
             </div>
+            {/* REMOVED: Discount Percentage input field */}
+            {/*
             <div>
               <label className="block mb-1 font-medium text-gray-700">
                 Discount Percentage (Optional)
@@ -578,6 +581,7 @@ export default function UpdateProduct() {
                 placeholder="Enter discount percentage (0-100)"
               />
             </div>
+            */}
             <div>
               <label className="block mb-1 font-medium text-gray-700">
                 Max Discount Percentage (Optional)

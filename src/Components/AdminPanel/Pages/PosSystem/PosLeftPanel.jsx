@@ -1,3 +1,4 @@
+// PosLeftPanel.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
@@ -34,9 +35,9 @@ export default function POSLeftPanel({
   products,
   filters,
   setFilters,
-  setSelectedItems,
   searchText,
   setSearchText,
+  onProductClick, // ADD THIS PROP: Callback to open the product details modal
 }) {
   const navigate = useNavigate();
 
@@ -56,9 +57,10 @@ export default function POSLeftPanel({
         const topLevel = all.filter((cat) => cat.parentCategoryId === null);
         setCategories(topLevel);
 
-        // If already selected category, update its subcategories
         if (filters.categoryId) {
-          const selected = all.find((cat) => cat.categoryId === filters.categoryId);
+          const selected = all.find(
+            (cat) => cat.categoryId === filters.categoryId
+          );
           setSubCategories(selected?.subCategories || []);
         }
       } catch (err) {
@@ -71,7 +73,9 @@ export default function POSLeftPanel({
 
   const handleCategoryChange = (selectedOption) => {
     const categoryId = selectedOption ? selectedOption.value : null;
-    const selected = allFetchedCategories.find((cat) => cat.categoryId === categoryId);
+    const selected = allFetchedCategories.find(
+      (cat) => cat.categoryId === categoryId
+    );
     setFilters({
       categoryId,
       subCategoryId: null,
@@ -87,38 +91,16 @@ export default function POSLeftPanel({
     }));
   };
 
+  // MODIFIED: This now calls the prop onProductClick to open the modal
   const handleProductClick = (product) => {
-    setSelectedItems((prev) => {
-      const existingItemIndex = prev.findIndex(
-        (item) => item.productId === product.productId
-      );
-      if (existingItemIndex !== -1) {
-        const updated = [...prev];
-        updated[existingItemIndex].quantity += 1;
-        return updated;
-      } else {
-        const initialQuantity = 1;
-        const initialUnitPrice = Number(product.basePrice || 0);
-        return [
-          ...prev,
-          {
-            ...product,
-            quantity: initialQuantity,
-            productVariantId: null,
-            selectedVariantDetails: null,
-            pricingType: product.pricingType,
-            widthInch: null,
-            heightInch: null,
-            customUnitPrice: initialUnitPrice,
-            availableVariants: product.variants || [],
-          },
-        ];
-      }
-    });
+    if (onProductClick) {
+      onProductClick(product); // Pass the product to the parent to open the modal
+    }
   };
 
   const getImageUrl = (product) => {
-    if (!product.images || product.images.length === 0) return "/placeholder.png";
+    if (!product.images || product.images.length === 0)
+      return "/placeholder.png";
     const imgName = product.images[0].imageName;
     if (!imgName || typeof imgName !== "string") return "/placeholder.png";
     return `https://test.api.dpmsign.com/static/product-images/${imgName}`;
@@ -141,10 +123,7 @@ export default function POSLeftPanel({
   return (
     <div className="col-span-7 bg-gray-100 border-r p-4 overflow-y-auto">
       <div className="flex items-center gap-2 mb-4">
-        <button
-          className="btn btn-sm btn-primary"
-          onClick={() => navigate(-1)}
-        >
+        <button className="btn btn-sm btn-primary" onClick={() => navigate(-1)}>
           Go Back
         </button>
 
@@ -175,9 +154,8 @@ export default function POSLeftPanel({
               ? {
                   value: filters.categoryId,
                   label:
-                    categories.find(
-                      (c) => c.categoryId === filters.categoryId
-                    )?.name || "Unknown",
+                    categories.find((c) => c.categoryId === filters.categoryId)
+                      ?.name || "Unknown",
                 }
               : { value: null, label: "All Categories" }
           }

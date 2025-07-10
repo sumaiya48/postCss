@@ -3,7 +3,12 @@ import axios from "axios";
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 
-export default function ProductModal({ product, onClose, refreshProducts, getCategoryName }) {
+export default function ProductModal({
+  product,
+  onClose,
+  refreshProducts,
+  getCategoryName,
+}) {
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -19,6 +24,11 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
     variations: [],
     variants: [],
     images: [],
+    // New: Add discount fields to formData [new feature]
+    discountStart: null,
+    discountEnd: null,
+    // REMOVED: discountPercentage: null,
+    maxDiscountPercentage: null,
   });
 
   useEffect(() => {
@@ -37,19 +47,26 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
         variations: product.variations || [],
         variants: product.variants || [],
         images: product.images || [],
+        // New: Initialize discount fields from product data [new feature]
+        discountStart: product.discountStart || null,
+        discountEnd: product.discountEnd || null,
+        // REMOVED: discountPercentage: product.discountPercentage || null,
+        maxDiscountPercentage: product.maxDiscountPercentage || null,
       });
     }
   }, [product]);
 
-  // For simplicity, only a few fields editable here; you can expand later
-
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (type === "checkbox") {
-      setFormData((prev) => ({ ...prev, [name]: checked }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    }
+    // New: Handle numeric input for optional fields to store null for empty string [new feature]
+    const newValue =
+      type === "number" && value === ""
+        ? null
+        : type === "checkbox"
+        ? checked
+        : value;
+
+    setFormData((prev) => ({ ...prev, [name]: newValue }));
   };
 
   const token = localStorage.getItem("authToken");
@@ -58,23 +75,66 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
     try {
       // Prepare data to send - adjust as per your API structure
       const payload = {
+        productId: product.productId, // Ensure productId is sent for update
         name: formData.name,
         description: formData.description,
-        sku: formData.sku,
+        // SKU is read-only on update, so no need to send it in the payload.
+        // If your API expects it, uncomment the line below.
+        // sku: formData.sku,
         basePrice: parseFloat(formData.basePrice),
         minOrderQuantity: parseInt(formData.minOrderQuantity),
         pricingType: formData.pricingType,
         isActive: formData.isActive,
         categoryId: formData.categoryId,
-        // tags, attributes, variations, variants might require special handling
+        // New: Include discount fields in the payload [new feature]
+        discountStart: formData.discountStart,
+        discountEnd: formData.discountEnd,
+        // REMOVED: discountPercentage: formData.discountPercentage,
+        maxDiscountPercentage: formData.maxDiscountPercentage,
+        // tags, attributes, variations, variants require specific handling for PUT/PATCH,
+        // this simple save only covers basic fields for now.
+        // For a full update, you'd send these as JSON.stringify if using FormData
+        // or as direct objects if using application/json
+        tags: formData.tags.map((t) => t.tag), // Assuming tags might be objects, convert to string array
+        attributes: formData.attributes.map(({ attributeId, ...a }) => a), // Remove attributeId for consistency with API
+        variations: formData.variations.map(
+          ({ variationItems, variationId, ...v }) => ({
+            ...v,
+            variationItems: variationItems.map(
+              ({ variationItemId, ...vi }) => vi
+            ),
+          })
+        ),
+        variants: formData.variants.map(
+          ({ productVariantId, variantDetails, ...v }) => ({
+            ...v,
+            additionalPrice: Number(v.additionalPrice) || 0,
+            variantDetails: variantDetails.map(
+              ({ productVariantDetailId, ...d }) => d
+            ),
+          })
+        ),
       };
 
-      // Example API call (PUT or PATCH)
+      // Create FormData to mimic UpdateProduct's submission (if your /api/product PUT expects FormData)
+      const submitFormData = new FormData();
+      // Append productId separately if your backend's PUT route expects it as a top-level form field
+      submitFormData.append("productId", product.productId);
+      submitFormData.append("productData", JSON.stringify(payload)); // Stringify the product details
+
+      // Since images are not directly editable in this modal's save,
+      // you would typically not send 'product-images' or 'existingImageIds'
+      // via this modal's save unless you add image management here.
+      // Assuming images are handled by `UpdateProduct.jsx` or a separate image endpoint.
+
       await axios.put(
-        `https://test.api.dpmsign.com/api/product/${product.productId}`,
-        payload,
+        `https://test.api.dpmsign.com/api/product/`, // Your PUT route for product update
+        submitFormData, // Send as FormData
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            // Axios automatically sets 'Content-Type': 'multipart/form-data'
+          },
         }
       );
 
@@ -83,7 +143,11 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
       refreshProducts(); // Refresh list in parent
     } catch (err) {
       console.error(err);
-      Swal.fire("Error", "Failed to update product!", "error");
+      Swal.fire(
+        "Error",
+        err.response?.data?.message || "Failed to update product!",
+        "error"
+      );
     }
   };
 
@@ -102,7 +166,12 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
             viewBox="0 0 24 24"
             stroke="currentColor"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
 
@@ -139,8 +208,12 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
               </>
             ) : (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formData.name}</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-wrap">{formData.description}</p>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {formData.name}
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-wrap">
+                  {formData.description}
+                </p>
               </>
             )}
           </div>
@@ -202,6 +275,91 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
               <p>{formData.pricingType || "N/A"}</p>
             )}
 
+            {/* Discount fields */}
+            {/* New: Discount Start [new feature] */}
+            <label className="font-semibold mt-4 block">Discount Start:</label>
+            {editMode ? (
+              <input
+                type="number"
+                name="discountStart"
+                value={formData.discountStart || ""}
+                onChange={handleChange}
+                className="input input-bordered w-full"
+                step="0.01"
+              />
+            ) : (
+              <p>
+                {formData.discountStart !== null
+                  ? formData.discountStart
+                  : "N/A"}
+              </p>
+            )}
+
+            {/* New: Discount End [new feature] */}
+            <label className="font-semibold mt-4 block">Discount End:</label>
+            {editMode ? (
+              <input
+                type="number"
+                name="discountEnd"
+                value={formData.discountEnd || ""}
+                onChange={handleChange}
+                className="input input-bordered w-full"
+                step="0.01"
+              />
+            ) : (
+              <p>
+                {formData.discountEnd !== null ? formData.discountEnd : "N/A"}
+              </p>
+            )}
+
+            {/* REMOVED: Discount Percentage display/input */}
+            {/*
+            <label className="font-semibold mt-4 block">
+              Discount Percentage:
+            </label>
+            {editMode ? (
+              <input
+                type="number"
+                name="discountPercentage"
+                value={formData.discountPercentage || ""}
+                onChange={handleChange}
+                className="input input-bordered w-full"
+                step="0.01"
+                min="0"
+                max="100"
+              />
+            ) : (
+              <p>
+                {formData.discountPercentage !== null
+                  ? `${formData.discountPercentage}%`
+                  : "N/A"}
+              </p>
+            )}
+            */}
+
+            {/* New: Max Discount Percentage [new feature] */}
+            <label className="font-semibold mt-4 block">
+              Max Discount Percentage:
+            </label>
+            {editMode ? (
+              <input
+                type="number"
+                name="maxDiscountPercentage"
+                value={formData.maxDiscountPercentage || ""}
+                onChange={handleChange}
+                className="input input-bordered w-full"
+                step="0.01"
+                min="0"
+                max="100"
+              />
+            ) : (
+              <p>
+                {formData.maxDiscountPercentage !== null
+                  ? `${formData.maxDiscountPercentage}%`
+                  : "N/A"}
+              </p>
+            )}
+
             <label className="font-semibold mt-4 block">Status:</label>
             {editMode ? (
               <input
@@ -226,10 +384,9 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
                 className="select select-bordered w-full"
               >
                 <option value="">Select Category</option>
-                {/* map your categories here */}
-                {/* Assuming getCategoryName is from parent, you might need to pass categories as prop */}
-                {/* Example: */}
-                {/* categories.map(cat => <option key={cat.categoryId} value={cat.categoryId}>{cat.name}</option>) */}
+                {/* categories array needed here for options */}
+                {/* Example: Replace with actual categories passed as prop */}
+                {/* {categories.map(cat => <option key={cat.categoryId} value={cat.categoryId}>{cat.name}</option>)} */}
               </select>
             ) : (
               <p>{getCategoryName(formData.categoryId)}</p>
@@ -257,17 +414,105 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
             {/* You can add tag editing UI here if you want */}
           </div>
 
-          {/* Attributes, Variations, Variants */}
+          {/* Attributes */}
           <div className="md:col-span-2">
             <p className="font-semibold mb-1">Attributes:</p>
             {formData.attributes && formData.attributes.length > 0 ? (
-              <ul className="list-disc list-inside">
-                {formData.attributes.map((attr) => (
-                  <li key={attr.attributeId || attr.property}>
-                    <strong>{attr.property}:</strong> {attr.description}
-                  </li>
-                ))}
-              </ul>
+              // New: Always display attributes as a table in ProductModal [new feature]
+              <div className="overflow-x-auto">
+                <table className="table w-full table-bordered border border-gray-300">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="px-4 py-2 border-r border-gray-300">
+                        Property
+                      </th>
+                      <th className="px-4 py-2">Description</th>
+                      {editMode && <th className="px-4 py-2">Actions</th>}{" "}
+                      {/* Only show Actions column in edit mode */}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formData.attributes.map((attr, idx) => (
+                      <tr key={attr.attributeId || idx}>
+                        <td className="px-4 py-2 border-r border-gray-300">
+                          {editMode ? (
+                            <input
+                              type="text"
+                              value={attr.property}
+                              onChange={(e) => {
+                                const newAttributes = [...formData.attributes];
+                                newAttributes[idx].property = e.target.value;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  attributes: newAttributes,
+                                }));
+                              }}
+                              className="input input-bordered w-full input-xs"
+                            />
+                          ) : (
+                            attr.property
+                          )}
+                        </td>
+                        <td className="px-4 py-2">
+                          {editMode ? (
+                            <input
+                              type="text"
+                              value={attr.description}
+                              onChange={(e) => {
+                                const newAttributes = [...formData.attributes];
+                                newAttributes[idx].description = e.target.value;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  attributes: newAttributes,
+                                }));
+                              }}
+                              className="input input-bordered w-full input-xs"
+                            />
+                          ) : (
+                            attr.description
+                          )}
+                        </td>
+                        {editMode && ( // Only show Remove button in edit mode
+                          <td className="px-4 py-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  attributes: prev.attributes.filter(
+                                    (_, i) => i !== idx
+                                  ),
+                                }));
+                              }}
+                              className="btn btn-sm btn-error"
+                              title="Remove Attribute"
+                            >
+                              ×
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {editMode && ( // Only show Add Attribute button in edit mode
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        attributes: [
+                          ...prev.attributes,
+                          { property: "", description: "" },
+                        ],
+                      }))
+                    }
+                    className="btn btn-sm btn-secondary mt-2"
+                  >
+                    + Add Attribute
+                  </button>
+                )}
+              </div>
             ) : (
               <p>N/A</p>
             )}
@@ -276,17 +521,146 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
           <div className="md:col-span-2">
             <p className="font-semibold mb-1">Variations:</p>
             {formData.variations && formData.variations.length > 0 ? (
-              <ul className="list-disc list-inside">
-                {formData.variations.map((variation) => (
-                  <li key={variation.variationId || variation.name}>
-                    <strong>{variation.name}</strong>{" "}
-                    {variation.unit && `(${variation.unit})`} -{" "}
-                    {variation.variationItems && variation.variationItems.length > 0
-                      ? variation.variationItems.map((v) => v.value).join(", ")
-                      : "N/A"}
-                  </li>
-                ))}
-              </ul>
+              // New: Conditionally render variations based on editMode [new feature]
+              editMode ? (
+                // Edit mode for variations (simplified for brevity, actual implementation needs full edit fields)
+                <div className="space-y-4">
+                  {formData.variations.map((v, i) => (
+                    <div
+                      key={v.variationId || i}
+                      className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50"
+                    >
+                      <div className="flex flex-wrap gap-3 items-end mb-3">
+                        <input
+                          placeholder="Name"
+                          value={v.name}
+                          onChange={(e) => {
+                            const newVariations = [...formData.variations];
+                            newVariations[i].name = e.target.value;
+                            setFormData((prev) => ({
+                              ...prev,
+                              variations: newVariations,
+                            }));
+                          }}
+                          className="input input-bordered flex-grow min-w-[150px]"
+                        />
+                        <input
+                          placeholder="Unit"
+                          value={v.unit}
+                          onChange={(e) => {
+                            const newVariations = [...formData.variations];
+                            newVariations[i].unit = e.target.value;
+                            setFormData((prev) => ({
+                              ...prev,
+                              variations: newVariations,
+                            }));
+                          }}
+                          className="input input-bordered w-36"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              variations: prev.variations.filter(
+                                (_, idx) => idx !== i
+                              ),
+                            }))
+                          }
+                          className="btn btn-sm btn-error ml-auto"
+                        >
+                          Remove Variation
+                        </button>
+                      </div>
+                      <div>
+                        <label className="block mb-1 font-medium">Items</label>
+                        {v.variationItems.map((vi, j) => (
+                          <div
+                            key={vi.variationItemId || j}
+                            className="flex gap-3 items-center mb-2"
+                          >
+                            <input
+                              placeholder="Value"
+                              value={vi.value}
+                              onChange={(e) => {
+                                const newVariations = [...formData.variations];
+                                newVariations[i].variationItems[j].value =
+                                  e.target.value;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  variations: newVariations,
+                                }));
+                              }}
+                              className="input input-bordered flex-grow"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newVariations = [...formData.variations];
+                                newVariations[i].variationItems = newVariations[
+                                  i
+                                ].variationItems.filter((_, idx) => idx !== j);
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  variations: newVariations,
+                                }));
+                              }}
+                              className="btn btn-sm btn-error"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newVariations = [...formData.variations];
+                            newVariations[i].variationItems.push({ value: "" });
+                            setFormData((prev) => ({
+                              ...prev,
+                              variations: newVariations,
+                            }));
+                          }}
+                          className="btn btn-xs btn-secondary mt-1"
+                        >
+                          + Add Item
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        variations: [
+                          ...prev.variations,
+                          { name: "", unit: "", variationItems: [] },
+                        ],
+                      }))
+                    }
+                    className="btn btn-sm btn-secondary"
+                  >
+                    + Add Variation
+                  </button>
+                </div>
+              ) : (
+                // View mode for variations
+                <ul className="list-disc list-inside">
+                  {formData.variations.map((variation) => (
+                    <li key={variation.variationId || variation.name}>
+                      <strong>{variation.name}</strong>{" "}
+                      {variation.unit && `(${variation.unit})`} -{" "}
+                      {variation.variationItems &&
+                      variation.variationItems.length > 0
+                        ? variation.variationItems
+                            .map((v) => v.value)
+                            .join(", ")
+                        : "N/A"}
+                    </li>
+                  ))}
+                </ul>
+              )
             ) : (
               <p>N/A</p>
             )}
@@ -295,18 +669,180 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
           <div className="md:col-span-2">
             <p className="font-semibold mb-1">Variants:</p>
             {formData.variants && formData.variants.length > 0 ? (
-              <ul className="list-disc list-inside">
-                {formData.variants.map((variant, idx) => (
-                  <li key={variant.productVariantId || idx}>
-                    Additional Price: Tk {variant.additionalPrice || "0.00"} -{" "}
-                    {variant.variantDetails && variant.variantDetails.length > 0
-                      ? variant.variantDetails
-                          .map((detail) => detail.variationItem?.value || detail.variationItemValue || "")
-                          .join(", ")
-                      : "N/A"}
-                  </li>
-                ))}
-              </ul>
+              // New: Conditionally render variants based on editMode [new feature]
+              editMode ? (
+                // Edit mode for variants (simplified for brevity, actual implementation needs full edit fields)
+                <div className="space-y-4">
+                  {formData.variants.map((vt, i) => (
+                    <div
+                      key={vt.productVariantId || i}
+                      className="mb-4 p-4 border rounded-lg shadow-sm bg-gray-50"
+                    >
+                      <div className="flex flex-wrap gap-3 items-end mb-3">
+                        <input
+                          type="number"
+                          placeholder="Additional Price"
+                          value={vt.additionalPrice}
+                          onChange={(e) => {
+                            const newVariants = [...formData.variants];
+                            newVariants[i].additionalPrice = e.target.value;
+                            setFormData((prev) => ({
+                              ...prev,
+                              variants: newVariants,
+                            }));
+                          }}
+                          className="input input-bordered w-40"
+                          min={0}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              variants: prev.variants.filter(
+                                (_, idx) => idx !== i
+                              ),
+                            }))
+                          }
+                          className="btn btn-sm btn-error ml-auto"
+                        >
+                          Remove Variant
+                        </button>
+                      </div>
+                      <div>
+                        <label className="block mb-1 font-medium">
+                          Details
+                        </label>
+                        {vt.variantDetails.map((d, j) => (
+                          <div
+                            key={d.productVariantDetailId || j}
+                            className="flex gap-3 items-center mb-2"
+                          >
+                            <select
+                              value={d.variationName}
+                              onChange={(e) => {
+                                const newVariants = [...formData.variants];
+                                newVariants[i].variantDetails[j].variationName =
+                                  e.target.value;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  variants: newVariants,
+                                }));
+                              }}
+                              className="select select-bordered flex-grow"
+                              required
+                            >
+                              <option value="">Select Variation Name</option>
+                              {formData.variations.map(
+                                (variationOption, idx) => (
+                                  <option
+                                    key={idx}
+                                    value={variationOption.name}
+                                  >
+                                    {variationOption.name}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                            <select
+                              value={d.variationItemValue}
+                              onChange={(e) => {
+                                const newVariants = [...formData.variants];
+                                newVariants[i].variantDetails[
+                                  j
+                                ].variationItemValue = e.target.value;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  variants: newVariants,
+                                }));
+                              }}
+                              className="select select-bordered flex-grow"
+                              required
+                            >
+                              <option value="">Select Item Value</option>
+                              {formData.variations
+                                .find((v) => v.name === d.variationName)
+                                ?.variationItems.map((item, idx) => (
+                                  <option key={idx} value={item.value}>
+                                    {item.value}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newVariants = [...formData.variants];
+                                newVariants[i].variantDetails = newVariants[
+                                  i
+                                ].variantDetails.filter((_, idx) => idx !== j);
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  variants: newVariants,
+                                }));
+                              }}
+                              className="btn btn-sm btn-error"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newVariants = [...formData.variants];
+                            newVariants[i].variantDetails.push({
+                              variationName: "",
+                              variationItemValue: "",
+                            });
+                            setFormData((prev) => ({
+                              ...prev,
+                              variants: newVariants,
+                            }));
+                          }}
+                          className="btn btn-xs btn-secondary mt-1"
+                        >
+                          + Add Detail
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        variants: [
+                          ...prev.variants,
+                          { additionalPrice: "", variantDetails: [] },
+                        ],
+                      }))
+                    }
+                    className="btn btn-sm btn-secondary"
+                  >
+                    + Add Variant
+                  </button>
+                </div>
+              ) : (
+                // View mode for variants
+                <ul className="list-disc list-inside">
+                  {formData.variants.map((variant, idx) => (
+                    <li key={variant.productVariantId || idx}>
+                      Additional Price: Tk {variant.additionalPrice || "0.00"} -{" "}
+                      {variant.variantDetails &&
+                      variant.variantDetails.length > 0
+                        ? variant.variantDetails
+                            .map(
+                              (detail) =>
+                                detail.variationItem?.value ||
+                                detail.variationItemValue ||
+                                ""
+                            )
+                            .join(", ")
+                        : "N/A"}
+                    </li>
+                  ))}
+                </ul>
+              )
             ) : (
               <p>N/A</p>
             )}
@@ -328,10 +864,7 @@ export default function ProductModal({ product, onClose, refreshProducts, getCat
               </button>
             </>
           ) : (
-            <button
-              onClick={() => setEditMode(true)}
-              className="btn btn-info"
-            >
+            <button onClick={() => setEditMode(true)} className="btn btn-info">
               Edit Product
             </button>
           )}
