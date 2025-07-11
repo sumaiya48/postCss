@@ -103,7 +103,12 @@ const InvoicePDF = ({
           <Text style={styles.cell}>Qty</Text>
           <Text style={styles.cell}>Unit Price</Text>{" "}
           {/* Clarified "Unit Price" here if it's the customUnitPrice (base + variant additional) */}
-          <Text style={styles.amountRight}>Total</Text>
+          {/* *** ADDED HEADER CELLS *** */}
+          <Text style={styles.cell}>Subtotal (Before Item Disc)</Text>
+          <Text style={styles.cell}>Item Discount</Text>
+          {/* *** END ADDED HEADER CELLS *** */}
+          <Text style={styles.amountRight}>Final Total</Text>{" "}
+          {/* MODIFIED LABEL */}
         </View>
         {selectedItems.map((item, index) => (
           <View key={index} style={styles.row}>
@@ -123,6 +128,14 @@ const InvoicePDF = ({
                   </Text>
                 )}
             </Text>
+            {/* *** ADDED DATA CELLS *** */}
+            <Text style={styles.cell}>
+              {Number(item.calculatedBasePrice || 0).toFixed(2)} Tk
+            </Text>
+            <Text style={styles.cell}>
+              {Number(item.discountAmount || 0).toFixed(2)} Tk
+            </Text>
+            {/* *** END ADDED DATA CELLS *** */}
             <Text style={styles.amountRight}>
               {/* MODIFIED: Use item.calculatedItemTotal directly for the final total of this line item */}
               {Number(item.calculatedItemTotal).toFixed(2)} Tk
@@ -134,7 +147,10 @@ const InvoicePDF = ({
       {/* Totals */}
       <View style={styles.totalSection}>
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Subtotal:</Text>
+          <Text style={styles.totalLabel}>
+            Subtotal (After Item Discounts):
+          </Text>{" "}
+          {/* MODIFIED LABEL */}
           <Text style={styles.totalValue}>
             {/* Subtotal should sum up calculatedItemTotal of all items */}
             {selectedItems
@@ -151,7 +167,10 @@ const InvoicePDF = ({
           </Text>
         </View>
         <View style={styles.totalRow}>
-          <Text style={[styles.totalLabel, { fontSize: 12 }]}>Total:</Text>
+          <Text style={[styles.totalLabel, { fontSize: 12 }]}>
+            GRAND TOTAL:
+          </Text>{" "}
+          {/* MODIFIED LABEL */}
           <Text style={[styles.totalValue, { fontSize: 12 }]}>
             {/* grossTotal should be the final sum of all calculatedItemTotal values */}
             {grossTotal.toFixed(2)} Tk

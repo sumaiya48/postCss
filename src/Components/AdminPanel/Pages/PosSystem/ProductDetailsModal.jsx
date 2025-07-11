@@ -169,6 +169,9 @@ export default function ProductDetailsModal({
       selectedVariantDetails: formattedVariantDetails,
       availableVariants: product.variants || [],
       calculatedItemTotal: finalPrice, // This is the total price for this single line item (after all discounts)
+      // *** ADD THESE TWO LINES ***
+      calculatedBasePrice: calculatedBasePrice, // Price of this line item BEFORE applying the item-level quantity discount
+      discountAmount: discountAmount, // The specific discount amount applied to this line item
     };
     onAddItemToOrder(itemToAdd);
     onRequestClose();

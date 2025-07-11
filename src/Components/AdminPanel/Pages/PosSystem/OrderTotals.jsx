@@ -2,7 +2,7 @@
 import React from "react";
 
 export default function OrderTotals({
-  subTotal,
+  subTotal, // This is already the sum of discounted item totals from PosSystem.jsx
   couponDiscount,
   grossTotal,
   paymentMethod,
@@ -18,19 +18,38 @@ export default function OrderTotals({
   setCourierAddressInput,
   notesInput, // Add notesInput here
   setNotesInput, // Add setNotesInput function
+  // *** NEW PROPS FOR DETAILED TOTALS ***
+  totalBeforeItemDiscounts, // You'll need to calculate and pass this from PosSystem.jsx
+  totalItemDiscounts, // You'll need to calculate and pass this from PosSystem.jsx
 }) {
   return (
     <div className="space-y-2 text-sm">
+      {/* *** NEW DISPLAY LINES FOR DETAILED TOTALS *** */}
+      {totalBeforeItemDiscounts !== undefined && (
+        <div className="flex justify-between">
+          <span>Sub Total (Before Item Discounts)</span>
+          <span>{totalBeforeItemDiscounts?.toFixed(2)} Tk</span>
+        </div>
+      )}
+      {totalItemDiscounts !== undefined && totalItemDiscounts > 0 && (
+        <div className="flex justify-between text-green-700">
+          <span>Item Discounts Applied</span>
+          <span>-{totalItemDiscounts?.toFixed(2)} Tk</span>
+        </div>
+      )}
+      {/* *** END NEW DISPLAY LINES *** */}
+
+      {/* Changed label for clarity given the new breakdown */}
       <div className="flex justify-between">
-        <span>Sub Total</span>
+        <span>Sub Total (After Item Discounts)</span>
         <span>{subTotal?.toFixed(2)} Tk</span>
       </div>
       <div className="flex justify-between">
-        <span>Discount</span>
+        <span>Discount (Coupon)</span> {/* Clarified for coupon discount */}
         <span>{couponDiscount?.toFixed(2)} Tk</span>
       </div>
       <div className="flex justify-between font-bold">
-        <span>Gross Total</span>
+        <span>GRAND TOTAL</span> {/* Changed to GRAND TOTAL */}
         <span>{grossTotal?.toFixed(2)} Tk</span>
       </div>
 

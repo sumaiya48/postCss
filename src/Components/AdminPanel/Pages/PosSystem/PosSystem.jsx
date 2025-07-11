@@ -7,7 +7,7 @@ import POSLeftPanel from "./PosLeftPanel";
 import OrderSummary from "./OrderSummary";
 import CustomerSelector from "./CustomerSelector";
 import CouponInput from "./CouponInput";
-import OrderTotals from "./OrderTotals";
+import OrderTotals from "./OrderTotals"; // Make sure this import is correct
 import InvoiceGenerator from "./InvoiceGenerator";
 import StaffSelector from "./StaffSelector";
 import ProductDetailsModal from "./ProductDetailsModal";
@@ -104,33 +104,46 @@ export default function POSDashboard() {
   // MODIFIED: calculateItemTotal will use the 'calculatedItemTotal' passed from the modal
   // or re-calculate based on customUnitPrice and new quantity/dimensions if changed in OrderSummary
   const calculateItemTotal = useCallback((item) => {
-    // Always recalculate based on current item properties (quantity, customUnitPrice, dimensions).
-    // The 'calculatedItemTotal' from the modal is a snapshot at the time of adding;
-    // we need to re-evaluate it if inputs are changed in OrderSummary.
+    // This function is generally used for displaying the *final* total of an item line
+    // when quantities/dimensions are changed in the OrderSummary.
+    // However, the initial `calculatedItemTotal` from the modal already includes the discount.
+    // For clarity in OrderSummary, we'll primarily use `item.calculatedBasePrice`, `item.discountAmount`, and `item.calculatedItemTotal`.
+    // This function's role might change slightly if manual price adjustments in OrderSummary are allowed and need discount recalculation.
 
-    // Otherwise, recalculate if inputs were changed in OrderSummary.
-    // The `customUnitPrice` should reflect the price per unit/sqft *after* variant additions.
-    const pricePerUnitOrSqFt = Number(
-      item.customUnitPrice || item.basePrice || 0
-    );
-    const quantity = Number(item.quantity || 0);
+    // If you need to re-calculate from scratch in summary (e.g. for manual customUnitPrice edits):
+    // const pricePerUnitOrSqFt = Number(item.customUnitPrice || item.basePrice || 0);
+    // const quantity = Number(item.quantity || 0);
+    // if (item.pricingType === "square-feet" && item.widthInch && item.heightInch) {
+    //   const area = (item.widthInch / 12) * (item.heightInch / 12);
+    //   return pricePerUnitOrSqFt * quantity * area;
+    // }
+    // return pricePerUnitOrSqFt * quantity;
 
-    if (
-      item.pricingType === "square-feet" &&
-      item.widthInch &&
-      item.heightInch
-    ) {
-      const area = (item.widthInch / 12) * (item.heightInch / 12);
-      return pricePerUnitOrSqFt * quantity * area;
-    }
-    return pricePerUnitOrSqFt * quantity;
+    // For now, let's just use the final calculated total directly for sum calculations
+    return Number(item.calculatedItemTotal || 0);
   }, []);
 
-  const subTotal = selectedItems.reduce(
-    (sum, item) => sum + calculateItemTotal(item),
+  // *** NEW: Calculate total before item discounts and total item discounts ***
+  const totalBeforeItemDiscounts = selectedItems.reduce(
+    (sum, item) => sum + Number(item.calculatedBasePrice || 0),
     0
   );
-  const grossTotal = Math.max(subTotal - 0, 0); // Assuming no couponDiscount for now
+
+  const totalItemDiscounts = selectedItems.reduce(
+    (sum, item) => sum + Number(item.discountAmount || 0),
+    0
+  );
+  // *** END NEW CALCULATIONS ***
+
+  // Subtotal is now the sum of *final* item totals (after item-level discounts)
+  const subTotal = selectedItems.reduce(
+    (sum, item) => sum + Number(item.calculatedItemTotal || 0),
+    0
+  );
+
+  const couponDiscount = 0; // Still hardcoded to 0 as per your current setup
+
+  const grossTotal = Math.max(subTotal - couponDiscount, 0); // Gross total after all discounts
 
   const fetchProducts = async () => {
     try {
@@ -180,19 +193,76 @@ export default function POSDashboard() {
         if (item.productId === productId) {
           const updatedItem = { ...item, [field]: value };
 
-          // When any relevant field changes in OrderSummary, re-calculate the item total.
-          // This recalculation should use the item's current `customUnitPrice` (which
-          // includes the base price and selected variant's additional price).
-          // The discount calculation is NOT re-applied here, as that's complex and handled
-          // by the modal when initially adding the item. `calculatedItemTotal` should reflect that final price.
+          // When any relevant field changes in OrderSummary, recalculate.
+          // This part needs careful thought if you want to re-apply discounts
+          // when quantity/dimensions are changed AFTER item is added.
+          // For simplicity, we'll just recalculate `customUnitPrice * quantity/area` here.
+          // If you need dynamic discount recalculation here, it's a more complex logic to add.
           if (
             field === "quantity" ||
             field === "widthInch" ||
             field === "heightInch" ||
-            field === "customUnitPrice" // if customUnitPrice is manually changed
+            field === "customUnitPrice"
           ) {
             // Recalculate based on updated quantity/dimensions and current effective unit price (customUnitPrice)
-            updatedItem.calculatedItemTotal = calculateItemTotal(updatedItem);
+            const pricePerUnitOrSqFt = Number(
+              updatedItem.customUnitPrice || updatedItem.basePrice || 0
+            );
+            let itemBaseTotalBeforeDiscount = 0;
+            if (
+              updatedItem.pricingType === "square-feet" &&
+              updatedItem.widthInch &&
+              updatedItem.heightInch
+            ) {
+              const area =
+                (updatedItem.widthInch / 12) * (updatedItem.heightInch / 12);
+              itemBaseTotalBeforeDiscount =
+                pricePerUnitOrSqFt * updatedItem.quantity * area;
+            } else {
+              itemBaseTotalBeforeDiscount =
+                pricePerUnitOrSqFt * updatedItem.quantity;
+            }
+
+            // *** IMPORTANT: Reapplying the discount logic for OrderSummary changes ***
+            // This logic duplicates what's in ProductPriceCalculator.jsx for consistency.
+            const discountStart = Number(updatedItem.discountStart || 0);
+            const discountEnd = Number(updatedItem.discountEnd || 0);
+            const maxDiscountPercentage = Number(
+              updatedItem.maxDiscountPercentage || 0
+            );
+            let currentAreaOrQuantity =
+              updatedItem.pricingType === "square-feet"
+                ? (Number(updatedItem.widthInch) *
+                    Number(updatedItem.heightInch)) /
+                  144
+                : Number(updatedItem.quantity);
+
+            let actualDiscountPercentage = 0;
+            if (currentAreaOrQuantity >= discountStart) {
+              if (currentAreaOrQuantity <= discountEnd) {
+                if (discountEnd > discountStart) {
+                  actualDiscountPercentage =
+                    (maxDiscountPercentage *
+                      (currentAreaOrQuantity - discountStart)) /
+                    (discountEnd - discountStart);
+                } else {
+                  actualDiscountPercentage = maxDiscountPercentage;
+                }
+              } else {
+                actualDiscountPercentage = maxDiscountPercentage;
+              }
+            } else {
+              actualDiscountPercentage = 0;
+            }
+            const itemDiscountAmount =
+              (itemBaseTotalBeforeDiscount * actualDiscountPercentage) / 100;
+            const itemFinalPrice =
+              itemBaseTotalBeforeDiscount - itemDiscountAmount;
+
+            updatedItem.calculatedBasePrice = itemBaseTotalBeforeDiscount;
+            updatedItem.discountAmount = itemDiscountAmount;
+            updatedItem.calculatedItemTotal = itemFinalPrice;
+            // *** END Reapplying discount logic ***
           }
           return updatedItem;
         }
@@ -241,10 +311,65 @@ export default function POSDashboard() {
               variationItemValue: detail.variationItem?.value,
             })) || null, // Update variant details
           customUnitPrice: newCustomUnitPrice,
+          // When variant changes, base price for calculation changes, so re-evaluate all.
+          // This is a simplified re-evaluation; a full re-calculation including discount
+          // should ideally be encapsulated or trigger the modal again.
+          // For simplicity, we are recalculating calculatedBasePrice, discountAmount, and calculatedItemTotal here.
         };
 
-        // Recalculate item total based on new customUnitPrice
-        updatedItem.calculatedItemTotal = calculateItemTotal(updatedItem);
+        // Reapplying the discount logic for variant changes
+        const pricePerUnitOrSqFt = newCustomUnitPrice;
+        let itemBaseTotalBeforeDiscount = 0;
+        if (
+          updatedItem.pricingType === "square-feet" &&
+          updatedItem.widthInch &&
+          updatedItem.heightInch
+        ) {
+          const area =
+            (updatedItem.widthInch / 12) * (updatedItem.heightInch / 12);
+          itemBaseTotalBeforeDiscount =
+            pricePerUnitOrSqFt * updatedItem.quantity * area;
+        } else {
+          itemBaseTotalBeforeDiscount =
+            pricePerUnitOrSqFt * updatedItem.quantity;
+        }
+
+        const discountStart = Number(updatedItem.discountStart || 0);
+        const discountEnd = Number(updatedItem.discountEnd || 0);
+        const maxDiscountPercentage = Number(
+          updatedItem.maxDiscountPercentage || 0
+        );
+        let currentAreaOrQuantity =
+          updatedItem.pricingType === "square-feet"
+            ? (Number(updatedItem.widthInch) * Number(updatedItem.heightInch)) /
+              144
+            : Number(updatedItem.quantity);
+
+        let actualDiscountPercentage = 0;
+        if (currentAreaOrQuantity >= discountStart) {
+          if (currentAreaOrQuantity <= discountEnd) {
+            if (discountEnd > discountStart) {
+              actualDiscountPercentage =
+                (maxDiscountPercentage *
+                  (currentAreaOrQuantity - discountStart)) /
+                (discountEnd - discountStart);
+            } else {
+              actualDiscountPercentage = maxDiscountPercentage;
+            }
+          } else {
+            actualDiscountPercentage = maxDiscountPercentage;
+          }
+        } else {
+          actualDiscountPercentage = 0;
+        }
+        const itemDiscountAmount =
+          (itemBaseTotalBeforeDiscount * actualDiscountPercentage) / 100;
+        const itemFinalPrice = itemBaseTotalBeforeDiscount - itemDiscountAmount;
+
+        updatedItem.calculatedBasePrice = itemBaseTotalBeforeDiscount;
+        updatedItem.discountAmount = itemDiscountAmount;
+        updatedItem.calculatedItemTotal = itemFinalPrice;
+        // End re-applying discount logic for variant changes.
 
         return updatedItem;
       })
@@ -276,60 +401,112 @@ export default function POSDashboard() {
   }, []);
 
   // NEW HANDLER TO ADD ITEM FROM MODAL TO SELECTED ITEMS
-  const handleAddItemFromModal = useCallback((itemToAdd) => {
-    setSelectedItems((prev) => {
-      // For square-feet products, you might want to allow multiple instances
-      // if dimensions are different, even if it's the same product ID.
-      // For flat products, if quantity is just being updated, increment it.
-      // IMPORTANT: The `calculatedItemTotal` and `customUnitPrice` from the modal
-      // should be preserved, as they already reflect the full calculation including discount.
+  const handleAddItemFromModal = useCallback(
+    (itemToAdd) => {
+      setSelectedItems((prev) => {
+        // For square-feet products, you might want to allow multiple instances
+        // if dimensions are different, even if it's the same product ID.
+        // For flat products, if quantity is just being updated, increment it.
+        // IMPORTANT: The `calculatedItemTotal` and `customUnitPrice` from the modal
+        // should be preserved, as they already reflect the full calculation including discount.
 
-      const existingItemIndex = prev.findIndex(
-        (item) =>
-          item.productId === itemToAdd.productId &&
-          item.widthInch === itemToAdd.widthInch && // Important for square-feet uniqueness
-          item.heightInch === itemToAdd.heightInch && // Important for square-feet uniqueness
-          item.productVariantId === itemToAdd.productVariantId // Important for variant uniqueness
-      );
+        const existingItemIndex = prev.findIndex(
+          (item) =>
+            item.productId === itemToAdd.productId &&
+            item.widthInch === itemToAdd.widthInch && // Important for square-feet uniqueness
+            item.heightInch === itemToAdd.heightInch && // Important for square-feet uniqueness
+            item.productVariantId === itemToAdd.productVariantId // Important for variant uniqueness
+        );
 
-      if (existingItemIndex !== -1 && itemToAdd.pricingType !== "square-feet") {
-        // If existing and not square-feet (which might need unique entries per dimension), update quantity
-        // For flat products, sum up quantities and calculate new total.
-        const updated = [...prev];
-        const existing = updated[existingItemIndex];
+        if (
+          existingItemIndex !== -1 &&
+          itemToAdd.pricingType !== "square-feet"
+        ) {
+          // If existing and not square-feet (which might need unique entries per dimension), update quantity
+          // For flat products, sum up quantities and calculate new total.
+          const updated = [...prev];
+          const existing = updated[existingItemIndex];
 
-        // Recalculate combined total
-        const newTotalQuantity = existing.quantity + itemToAdd.quantity;
-        let newCalculatedItemTotal;
+          // Recalculate combined total
+          const newTotalQuantity = existing.quantity + itemToAdd.quantity;
+          let newCalculatedItemTotal;
+          let newCalculatedBasePrice;
+          let newDiscountAmount;
 
-        // If the customUnitPrice is consistent, recalculate total based on new quantity.
-        // Otherwise, it implies different pricing, so maybe it should be a new line item.
-        // For simplicity, if unit prices are different on re-add, create new item.
-        // If unit prices are the same, combine quantities and recalculate total.
-        if (existing.customUnitPrice === itemToAdd.customUnitPrice) {
-          newCalculatedItemTotal = itemToAdd.customUnitPrice * newTotalQuantity;
+          // If the customUnitPrice is consistent, recalculate total based on new quantity.
+          // Otherwise, it implies different pricing, so maybe it should be a new line item.
+          // For simplicity, if unit prices are different on re-add, create new item.
+          // If unit prices are the same, combine quantities and recalculate total.
+          if (existing.customUnitPrice === itemToAdd.customUnitPrice) {
+            // Reapply the discount logic here based on new total quantity
+            const pricePerUnitOrSqFt = Number(
+              existing.customUnitPrice || existing.basePrice || 0
+            );
+            const currentProduct = products.find(
+              (p) => p.productId === existing.productId
+            ); // Get product details for discount rules
+            const discountStart = Number(currentProduct?.discountStart || 0);
+            const discountEnd = Number(currentProduct?.discountEnd || 0);
+            const maxDiscountPercentage = Number(
+              currentProduct?.maxDiscountPercentage || 0
+            );
+
+            let itemBaseTotalBeforeDiscount =
+              pricePerUnitOrSqFt * newTotalQuantity;
+
+            let actualDiscountPercentage = 0;
+            if (newTotalQuantity >= discountStart) {
+              if (newTotalQuantity <= discountEnd) {
+                if (discountEnd > discountStart) {
+                  actualDiscountPercentage =
+                    (maxDiscountPercentage *
+                      (newTotalQuantity - discountStart)) /
+                    (discountEnd - discountStart);
+                } else {
+                  actualDiscountPercentage = maxDiscountPercentage;
+                }
+              } else {
+                actualDiscountPercentage = maxDiscountPercentage;
+              }
+            } else {
+              actualDiscountPercentage = 0;
+            }
+
+            newDiscountAmount =
+              (itemBaseTotalBeforeDiscount * actualDiscountPercentage) / 100;
+            newCalculatedItemTotal =
+              itemBaseTotalBeforeDiscount - newDiscountAmount;
+            newCalculatedBasePrice = itemBaseTotalBeforeDiscount; // The base price for the new combined quantity
+          } else {
+            // If customUnitPrice is different, don't try to merge too smartly,
+            // just sum up the existing item's totals with the new item's totals.
+            // This means if a flat product is added again with a *different* price, it becomes an aggregate.
+            newCalculatedItemTotal =
+              existing.calculatedItemTotal + itemToAdd.calculatedItemTotal;
+            newCalculatedBasePrice =
+              existing.calculatedBasePrice + itemToAdd.calculatedBasePrice;
+            newDiscountAmount =
+              existing.discountAmount + itemToAdd.discountAmount;
+          }
+
+          updated[existingItemIndex] = {
+            ...existing,
+            quantity: newTotalQuantity,
+            calculatedItemTotal: newCalculatedItemTotal,
+            calculatedBasePrice: newCalculatedBasePrice, // Update this as well
+            discountAmount: newDiscountAmount, // Update this as well
+          };
+          return updated;
         } else {
-          // If unit price changed somehow for the "same" flat product, add as new line or merge smartly
-          // For now, let's just add the new item total. A more complex system might average or pick one.
-          newCalculatedItemTotal =
-            existing.calculatedItemTotal + itemToAdd.calculatedItemTotal;
+          // Otherwise, add new item (either truly new, or a square-feet product with new dimensions/variant)
+          return [...prev, itemToAdd];
         }
-
-        updated[existingItemIndex] = {
-          ...existing,
-          quantity: newTotalQuantity,
-          // customUnitPrice should remain the same as they are considered "same" flat product
-          calculatedItemTotal: newCalculatedItemTotal,
-        };
-        return updated;
-      } else {
-        // Otherwise, add new item (either truly new, or a square-feet product with new dimensions/variant)
-        return [...prev, itemToAdd];
-      }
-    });
-    setIsProductModalOpen(false); // Close the modal
-    setSelectedProductForModal(null); // Clear the selected product
-  }, []);
+      });
+      setIsProductModalOpen(false); // Close the modal
+      setSelectedProductForModal(null); // Clear the selected product
+    },
+    [products]
+  ); // Add `products` to dependency array to access discount properties
 
   const handleSaveOrder = async () => {
     const token = localStorage.getItem("authToken");
@@ -387,10 +564,9 @@ export default function POSDashboard() {
         quantity: item.quantity,
         widthInch: item.widthInch || null,
         heightInch: item.heightInch || null,
-        // The 'price' sent to the backend should be the effective unit price after variant additions.
-        // The total order price will be summed up on the backend.
-        // Do NOT send `calculatedItemTotal` as `price` if backend expects unit price.
-        price: Number(item.customUnitPrice), // customUnitPrice holds the (base + variant additional) price per unit/sqft
+        // Send the final calculated total for this specific line item to the backend.
+        // The backend will then sum these values for the overall order total.
+        price: Number(item.calculatedItemTotal),
       })),
     };
 
@@ -456,7 +632,7 @@ export default function POSDashboard() {
           setFilters={setFilters}
           searchText={searchText}
           setSearchText={setSearchText}
-          onProductClick={handleProductClickForModal} // PASS THE NEW HANDLER
+          onProductClick={handleProductClickForModal}
         />
       </div>
       <div className="col-span-7 p-4 flex flex-col">
@@ -518,18 +694,13 @@ export default function POSDashboard() {
           calculateItemTotal={calculateItemTotal}
         />
 
-        {/* CouponInput remains commented out as per your original code */}
-        {/* <CouponInput
-          couponCode={couponCode}
-          setCouponCode={setCouponCode}
-          applyCoupon={applyCoupon}
-          couponError={couponError}
-          couponDiscount={couponDiscount}
-        /> */}
         <hr />
         <OrderTotals
-          subTotal={subTotal}
-          couponDiscount={0} // Pass 0 as coupon is commented out
+          // Pass new total breakdown to OrderTotals
+          totalBeforeItemDiscounts={totalBeforeItemDiscounts}
+          totalItemDiscounts={totalItemDiscounts}
+          subTotal={subTotal} // This is the sum of discounted line items
+          couponDiscount={couponDiscount} // Still 0
           grossTotal={grossTotal}
           paymentMethod={paymentMethod}
           setPaymentMethod={setPaymentMethod}
@@ -564,7 +735,6 @@ export default function POSDashboard() {
           />
         )}
 
-        {/* RENDER THE NEW PRODUCT DETAILS MODAL */}
         <ProductDetailsModal
           isOpen={isProductModalOpen}
           onRequestClose={() => setIsProductModalOpen(false)}

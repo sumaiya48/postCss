@@ -17,18 +17,22 @@ export default function OrderSummary({
       <thead className="bg-base-200">
         <tr>
           <th>Name</th>
-          <th>Variant</th> {/* Updated header for clarity */}
-          <th>Price (Unit/Sq.Ft)</th> {/* Clarified header for price */}
+          <th>Variant</th>
+          <th>Price (Unit/Sq.Ft)</th>
+          <th>Base Total</th> {/* NEW COLUMN HEADER */}
+          <th>Item Discount</th> {/* NEW COLUMN HEADER */}
           <th>Dimensions</th>
           <th>Qty</th>
-          <th>Total</th>
+          <th>Final Total</th> {/* Renamed for clarity */}
           <th>Remove</th>
         </tr>
       </thead>
       <tbody>
         {selectedItems.length === 0 ? (
           <tr>
-            <td colSpan={7} className="text-center text-gray-500">
+            <td colSpan={9} className="text-center text-gray-500">
+              {" "}
+              {/* Adjusted colspan */}
               No products selected.
             </td>
           </tr>
@@ -97,6 +101,7 @@ export default function OrderSummary({
                   )}
                 </td>
                 <td>
+                  {/* This is the unit price (base + variant add-on) */}
                   <input
                     type="number"
                     className="input input-bordered input-xs w-20 text-right"
@@ -110,6 +115,10 @@ export default function OrderSummary({
                     }
                   />
                 </td>
+                {/* *** NEW DATA CELLS FOR PRICE BREAKDOWN *** */}
+                <td>{Number(item.calculatedBasePrice || 0).toFixed(2)} Tk</td>
+                <td>{Number(item.discountAmount || 0).toFixed(2)} Tk</td>
+                {/* *** END NEW DATA CELLS *** */}
                 <td>
                   {item.pricingType === "square-feet" ? (
                     <div className="flex gap-1">
@@ -170,7 +179,8 @@ export default function OrderSummary({
                     +
                   </button>
                 </td>
-                <td>{calculateItemTotal(item).toFixed(2)} Tk</td>
+                <td>{item.calculatedItemTotal.toFixed(2)} Tk</td>{" "}
+                {/* Use calculatedItemTotal for final item total */}
                 <td>
                   <button
                     onClick={() => removeProduct(item.productId)}
