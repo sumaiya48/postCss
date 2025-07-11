@@ -1,16 +1,45 @@
-// Completed Orders Page with search, export, and filter by "order-completed"
-
-import React, { useEffect, useState } from "react";
-import { FaSync, FaFileCsv, FaFileExcel, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
+import React, { useEffect, useState, useMemo } from "react";
+import {
+  FaSync,
+  FaFileCsv,
+  FaFileExcel,
+  FaSortAlphaDown,
+  FaSortAlphaUp,
+  FaColumns,
+  FaTimes,
+  FaUser,
+  FaEnvelope,
+  FaPhone,
+  FaHome,
+  FaStickyNote,
+  FaCreditCard,
+  FaMoneyBill,
+  FaTruck,
+  FaCalendarAlt,
+  FaClipboardList, // Icons for order details modal
+} from "react-icons/fa";
 import * as XLSX from "xlsx";
+import ColumnManager from "./ColumnManager"; // Import ColumnManager; Added semicolon
+import DatePicker from "react-datepicker"; // Import DatePicker for consistency
+import "react-datepicker/dist/react-datepicker.css"; // Import DatePicker CSS for consistency
+import InvoiceDownloadButton from "./InvoiceDownloadButton"; // Import InvoiceDownloadButton for the details modal
 
 const statusBadge = (status) => {
-  const badgeClass = "badge px-2 py-0.5 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]";
+  const badgeClass =
+    "badge px-2 py-0.5 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]";
   switch (status) {
     case "pending":
-      return <span className={`${badgeClass} badge-error badge-outline`}>Pending</span>;
+      return (
+        <span className={`${badgeClass} badge-error badge-outline`}>
+          Pending
+        </span>
+      );
     case "partial":
-      return <span className={`${badgeClass} badge-info badge-outline`}>Partial</span>;
+      return (
+        <span className={`${badgeClass} badge-info badge-outline`}>
+          Partial
+        </span>
+      );
     case "paid":
       return <span className={`${badgeClass} badge-success`}>Paid</span>;
     case "order-completed":
@@ -20,14 +49,238 @@ const statusBadge = (status) => {
   }
 };
 
+// Define all possible columns with their properties (consistent across all order pages)
+const ALL_COLUMNS = [
+  {
+    id: "orderId",
+    label: "Order ID",
+    dataKey: "orderId",
+    isSortable: true,
+    defaultVisible: true,
+  },
+  {
+    id: "customerName",
+    label: "Customer",
+    dataKey: "customerName",
+    isSortable: true,
+    defaultVisible: true,
+  },
+  {
+    id: "customerPhone",
+    label: "Phone",
+    dataKey: "customerPhone",
+    isSortable: false,
+    defaultVisible: true,
+  },
+  {
+    id: "billingAddress",
+    label: "Address",
+    dataKey: "billingAddress",
+    isSortable: false,
+    defaultVisible: true,
+  },
+  {
+    id: "orderItemsCount",
+    label: "Items",
+    dataKey: "orderItemsCount",
+    isSortable: false,
+    defaultVisible: false,
+    render: (order) => order.orderItems?.length || 0,
+  },
+  {
+    id: "orderTotalPrice",
+    label: "Total (৳)",
+    dataKey: "orderTotalPrice",
+    isSortable: true,
+    defaultVisible: true,
+    render: (order) => order.orderTotalPrice?.toLocaleString("en-BD") || "-",
+  },
+  // Added "Due" column
+  {
+    id: "amountDue",
+    label: "Due (৳)",
+    dataKey: "amountDue",
+    isSortable: true,
+    defaultVisible: true,
+    render: (order) =>
+      (
+        order.orderTotalPrice -
+        (order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)
+      )?.toLocaleString("en-BD") || "-",
+  },
+  {
+    id: "paymentMethod",
+    label: "Payment Method",
+    dataKey: "paymentMethod",
+    isSortable: false,
+    defaultVisible: false,
+    render: (order) => order.paymentMethod?.replace("-payment", "") || "-",
+  },
+  {
+    id: "paymentStatus",
+    label: "Payment Status",
+    dataKey: "paymentStatus",
+    isSortable: true,
+    defaultVisible: true,
+    render: (order) => statusBadge(order.paymentStatus),
+  },
+  {
+    id: "status",
+    label: "Order Status",
+    dataKey: "status",
+    isSortable: false,
+    defaultVisible: true,
+    render: (order) => statusBadge(order.status),
+  },
+  {
+    id: "deliveryMethod",
+    label: "Delivery Method",
+    dataKey: "deliveryMethod",
+    isSortable: false,
+    defaultVisible: false,
+  },
+  {
+    id: "deliveryDate",
+    label: "Delivery Date",
+    dataKey: "deliveryDate",
+    isSortable: true,
+    defaultVisible: true,
+    render: (order) =>
+      order.deliveryDate
+        ? new Date(order.deliveryDate).toLocaleDateString()
+        : "N/A",
+  }, // Added for consistency
+  {
+    id: "createdAt",
+    label: "Created",
+    dataKey: "createdAt",
+    isSortable: true,
+    defaultVisible: false,
+    render: (order) =>
+      order.createdAt ? new Date(order.createdAt).toLocaleString() : "-",
+  },
+  {
+    id: "updatedAt",
+    label: "Completed",
+    dataKey: "updatedAt",
+    isSortable: true,
+    defaultVisible: true,
+    render: (order) =>
+      order.updatedAt ? new Date(order.updatedAt).toLocaleString() : "-",
+  },
+  {
+    id: "customerEmail",
+    label: "Email",
+    dataKey: "customerEmail",
+    isSortable: true,
+    defaultVisible: false,
+  },
+  {
+    id: "additionalNotes",
+    label: "Notes",
+    dataKey: "additionalNotes",
+    isSortable: false,
+    defaultVisible: false,
+    render: (order) => order.additionalNotes || "N/A",
+  },
+  {
+    id: "staffName",
+    label: "Agent",
+    dataKey: "staffName",
+    isSortable: true,
+    defaultVisible: false,
+  },
+  // Ensure these are visible by default for Completed and All Orders
+  {
+    id: "orderDetails",
+    label: "Details",
+    dataKey: "orderDetails",
+    isSortable: false,
+    defaultVisible: true,
+    render: (order, setSelectedOrder) => (
+      <button
+        onClick={() => setSelectedOrder(order)}
+        className="btn btn-outline btn-xs bg-blue-700 text-white"
+      >
+        View
+      </button>
+    ),
+  },
+  {
+    id: "invoiceDownload",
+    label: "Invoice",
+    dataKey: "invoiceDownload",
+    isSortable: false,
+    defaultVisible: true,
+    render: (order) => (
+      <InvoiceDownloadButton order={order} staffName={order.staffName} />
+    ),
+  },
+];
+
+// Define a unique localStorage key for this page's column configuration
+const LOCAL_STORAGE_COLUMNS_KEY = "orders_completed_page_columns";
+
 export default function CompletedOrders() {
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortField, setSortField] = useState(null);
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortField, setSortField] = useState("updatedAt");
+  const [sortAsc, setSortAsc] = useState(false); // Default to descending for 'updatedAt'
+  const [showColumnManager, setShowColumnManager] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null); // State for general order details modal
+
+  // State to manage which columns are currently visible in the table
+  // Initialized by attempting to load from localStorage, falling back to defaultVisible columns.
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    try {
+      const savedColumns = localStorage.getItem(LOCAL_STORAGE_COLUMNS_KEY);
+      if (savedColumns) {
+        const parsedColumns = JSON.parse(savedColumns);
+        // Ensure parsed columns are still valid and map to full column objects
+        return parsedColumns
+          .map((id) => ALL_COLUMNS.find((col) => col.id === id))
+          .filter(Boolean);
+      }
+    } catch (e) {
+      console.error("Failed to parse visible columns from localStorage", e);
+      // Fallback to default if parsing fails
+    }
+    return ALL_COLUMNS.filter((col) => col.defaultVisible);
+  });
+
+  // Effect to save visibleColumns to localStorage whenever it changes
+  useEffect(() => {
+    // Only save the IDs of the visible columns to keep the stored data minimal
+    localStorage.setItem(
+      LOCAL_STORAGE_COLUMNS_KEY,
+      JSON.stringify(visibleColumns.map((col) => col.id))
+    );
+  }, [visibleColumns]);
+
+  const [staffList, setStaffList] = useState([]);
+  const staffMap = useMemo(() => {
+    const map = {};
+    staffList.forEach((staff) => {
+      map[staff.staffId] = staff.name;
+    });
+    return map;
+  }, [staffList]);
+
+  const fetchStaff = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch("https://test.api.dpmsign.com/api/staff", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setStaffList(data?.data?.staff || []);
+    } catch (err) {
+      console.error("Failed to fetch staff:", err);
+    }
+  };
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -42,9 +295,14 @@ export default function CompletedOrders() {
       });
       if (!res.ok) throw new Error("Failed to fetch completed orders");
       const data = await res.json();
-      const completed = (data.data.orders || []).filter((o) => o.status === "order-completed");
+      const completed = (data.data.orders || [])
+        .filter((o) => o.status === "order-completed")
+        .map((order) => ({
+          ...order,
+          staffName: staffMap[order.staffId] || "N/A", // Add staffName to order object
+        }));
       setOrders(completed);
-      setFilteredOrders(completed);
+      applyFiltersAndSort(completed, searchTerm, sortField, sortAsc);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -52,20 +310,54 @@ export default function CompletedOrders() {
     }
   };
 
+  const applyFiltersAndSort = (currentOrders, term, field, asc) => {
+    let tempFiltered = currentOrders.filter(
+      (o) =>
+        o.customerName.toLowerCase().includes(term.toLowerCase()) ||
+        o.customerPhone.includes(term) ||
+        o.orderId.toString().includes(term)
+    );
+
+    const sorted = [...tempFiltered].sort((a, b) => {
+      const aVal = a[field];
+      const bVal = b[field];
+
+      if (field === "orderTotalPrice") {
+        return asc ? aVal - bVal : bVal - aVal;
+      }
+      if (
+        field === "createdAt" ||
+        field === "updatedAt" ||
+        field === "deliveryDate"
+      ) {
+        const dateA = new Date(aVal);
+        const dateB = new Date(bVal);
+        return asc ? dateA - dateB : dateB - dateA;
+      }
+      if (typeof aVal === "string") {
+        return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return 0;
+    });
+    setFilteredOrders(sorted);
+  };
+
   useEffect(() => {
-    fetchOrders();
+    fetchStaff();
   }, []);
 
+  useEffect(() => {
+    if (staffList.length > 0 || !loading) {
+      fetchOrders();
+    }
+  }, [staffList]);
+
+  useEffect(() => {
+    applyFiltersAndSort(orders, searchTerm, sortField, sortAsc);
+  }, [orders, searchTerm, sortField, sortAsc]);
+
   const handleSearch = (e) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    const filtered = orders.filter(
-      (o) =>
-        o.customerName.toLowerCase().includes(value.toLowerCase()) ||
-        o.customerPhone.includes(value) ||
-        o.orderId.toString().includes(value)
-    );
-    setFilteredOrders(filtered);
+    setSearchTerm(e.target.value);
   };
 
   const exportToExcel = () => {
@@ -83,94 +375,291 @@ export default function CompletedOrders() {
     link.href = URL.createObjectURL(blob);
     link.setAttribute("download", "completed_orders.csv");
     document.body.appendChild(link);
-    link.click();
     document.body.removeChild(link);
   };
 
-  const handleSort = (field) => {
+  const handleSort = (fieldId) => {
+    const field =
+      ALL_COLUMNS.find((col) => col.id === fieldId)?.dataKey || fieldId;
     const asc = field === sortField ? !sortAsc : true;
-    const sorted = [...filteredOrders].sort((a, b) => {
-      if (a[field] < b[field]) return asc ? -1 : 1;
-      if (a[field] > b[field]) return asc ? 1 : -1;
-      return 0;
-    });
     setSortField(field);
     setSortAsc(asc);
-    setFilteredOrders(sorted);
   };
 
+  // Function to close the general order details modal
+  const closeOrderDetailsModal = () => setSelectedOrder(null);
+
   return (
-    <div className="p-6 max-w-6xl mx-auto bg-gray-50 min-h-screen">
+    <div className="p-6 max-w-6xl mx-auto bg-gray-50 min-h-screen rounded-lg shadow-lg">
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-1">✅ Completed Orders</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-1">
+            ✅ Completed Orders
+          </h1>
           <p className="text-sm text-gray-500">
             Orders marked as completed. You can search, sort, or export them.
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           <input
             type="text"
             placeholder="Search name, phone, ID..."
             value={searchTerm}
             onChange={handleSearch}
-            className="input input-sm input-bordered w-52"
+            className="input input-sm input-bordered w-52 rounded-md focus:ring-2 focus:ring-blue-500"
           />
-          <button className="btn btn-sm btn-info text-white shadow" onClick={fetchOrders} disabled={loading}>
+          <button
+            className="btn btn-sm btn-info text-white shadow-md rounded-md hover:scale-105 transition-transform"
+            onClick={fetchOrders}
+            disabled={loading}
+          >
             <FaSync className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button className="btn btn-sm btn-success text-white shadow" onClick={exportToExcel}>
+          <button
+            className="btn btn-sm btn-success text-white shadow-md rounded-md hover:scale-105 transition-transform"
+            onClick={exportToExcel}
+          >
             <FaFileExcel /> Excel
           </button>
-          <button className="btn btn-sm btn-warning text-white shadow" onClick={exportToCSV}>
+          <button
+            className="btn btn-sm btn-warning text-white shadow-md rounded-md hover:scale-105 transition-transform"
+            onClick={exportToCSV}
+          >
             <FaFileCsv /> CSV
+          </button>
+          <button
+            className="btn btn-sm btn-neutral text-white shadow-md rounded-md hover:scale-105 transition-transform"
+            onClick={() => setShowColumnManager(true)}
+          >
+            <FaColumns /> Manage Columns
           </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto bg-white rounded-xl shadow-md">
+      <div className="overflow-x-auto bg-white rounded-xl shadow-md max-h-[calc(100vh-200px)] overflow-y-auto">
         {loading ? (
-          <div className="p-8 text-center text-sm text-gray-600">Loading completed orders...</div>
+          <div className="p-8 text-center text-sm text-gray-600">
+            Loading completed orders...
+          </div>
         ) : error ? (
-          <div className="p-8 text-center text-error text-sm font-medium">{error}</div>
+          <div className="p-8 text-center text-error text-sm font-medium">
+            {error}
+          </div>
         ) : filteredOrders.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No completed orders found.</div>
+          <div className="p-8 text-center text-gray-500 text-sm">
+            No completed orders found.
+          </div>
         ) : (
-          <table className="table table-xs">
-            <thead className="bg-base-200 text-gray-700 text-[11px]">
+          <table className="table table-xs table-pin-rows">
+            <thead className="bg-base-200 text-gray-700 text-[11px] sticky top-0 z-10">
               <tr>
-                <th className="cursor-pointer" onClick={() => handleSort("orderId")}>Order ID {sortField === "orderId" && (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}</th>
-                <th className="cursor-pointer" onClick={() => handleSort("customerName")}>Customer {sortField === "customerName" && (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}</th>
-                <th>Phone</th>
-                <th>Address</th>
-                <th>Items</th>
-                <th className="cursor-pointer" onClick={() => handleSort("orderTotalPrice")}>Total (৳) {sortField === "orderTotalPrice" && (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}</th>
-                <th>Payment</th>
-                <th>Status</th>
-                <th className="cursor-pointer" onClick={() => handleSort("updatedAt")}>Completed {sortField === "updatedAt" && (sortAsc ? <FaSortAlphaDown /> : <FaSortAlphaUp />)}</th>
+                {visibleColumns.map((col) => (
+                  <th
+                    key={col.id}
+                    className={`cursor-pointer ${
+                      col.isSortable ? "" : "pointer-events-none"
+                    }`}
+                    onClick={() => col.isSortable && handleSort(col.id)}
+                  >
+                    {col.label}
+                    {col.isSortable &&
+                      sortField === col.dataKey &&
+                      (sortAsc ? (
+                        <FaSortAlphaDown className="inline ml-1" />
+                      ) : (
+                        <FaSortAlphaUp className="inline ml-1" />
+                      ))}
+                  </th>
+                ))}
+                {/* Removed the static 'Actions' column header */}
               </tr>
             </thead>
             <tbody>
               {filteredOrders.map((order) => (
                 <tr key={order.orderId} className="hover text-xs">
-                  <td className="font-semibold text-gray-800">#{order.orderId}</td>
-                  <td>{order.customerName}</td>
-                  <td>{order.customerPhone}</td>
-                  <td className="max-w-[150px] truncate">{order.billingAddress}</td>
-                  <td className="text-center">{order.orderItems?.length || 0}</td>
-                  <td>{order.orderTotalPrice?.toLocaleString("en-BD") || "-"}</td>
-                  <td>{statusBadge(order.paymentStatus)}</td>
-                  <td>{statusBadge(order.status)}</td>
-                  <td className="whitespace-nowrap">{order.updatedAt ? new Date(order.updatedAt).toLocaleString() : "-"}</td>
+                  {visibleColumns.map((col) => (
+                    <td
+                      key={`${order.orderId}-${col.id}`}
+                      className={
+                        col.dataKey === "billingAddress"
+                          ? "max-w-[150px] truncate"
+                          : ""
+                      }
+                    >
+                      {/* Render custom date picker for deliveryDate column (read-only for completed) */}
+                      {col.id === "deliveryDate" ? (
+                        <div className="relative flex items-center">
+                          <DatePicker
+                            selected={
+                              order.deliveryDate
+                                ? new Date(order.deliveryDate)
+                                : null
+                            }
+                            dateFormat="yyyy/MM/dd"
+                            className="input input-xs input-bordered w-full pr-6"
+                            wrapperClassName="w-full"
+                            disabled // Make it read-only
+                          />
+                          <FaCalendarAlt className="absolute right-2 text-gray-400 pointer-events-none" />
+                        </div>
+                      ) : col.id === "orderDetails" ? ( // Render "View" button for order details
+                        col.render(order, setSelectedOrder)
+                      ) : col.id === "invoiceDownload" ? ( // Render InvoiceDownloadButton
+                        col.render(order)
+                      ) : col.render ? (
+                        col.render(order)
+                      ) : (
+                        order[col.dataKey]
+                      )}
+                    </td>
+                  ))}
+                  {/* The actions column content is now handled by the dynamic columns */}
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         <div className="p-4 text-xs text-gray-500 border-t text-right">
-          Showing {filteredOrders.length} entr{filteredOrders.length === 1 ? "y" : "ies"}
+          Showing {filteredOrders.length} entr
+          {filteredOrders.length === 1 ? "y" : "ies"}
         </div>
       </div>
+
+      {showColumnManager && (
+        <ColumnManager
+          allColumns={ALL_COLUMNS}
+          visibleColumns={visibleColumns}
+          setVisibleColumns={setVisibleColumns}
+          onClose={() => setShowColumnManager(false)}
+        />
+      )}
+
+      {/* General Order Details Modal */}
+      {selectedOrder && (
+        <dialog className="modal modal-open">
+          <div className="modal-box w-11/12 max-w-4xl bg-white p-6 rounded-lg shadow-xl">
+            <div className="flex justify-between items-center border-b pb-3 mb-4">
+              <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <FaClipboardList /> Order #{selectedOrder.orderId} Details
+              </h3>
+              <button
+                onClick={closeOrderDetailsModal}
+                className="btn btn-sm btn-circle btn-error text-white"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+              <div className="space-y-1">
+                <p className="flex items-center gap-2">
+                  <FaUser /> <strong>Customer:</strong>{" "}
+                  {selectedOrder.customerName}
+                </p>
+                <p className="flex items-center gap-2">
+                  <FaEnvelope /> <strong>Email:</strong>{" "}
+                  {selectedOrder.customerEmail || "N/A"}
+                </p>
+                <p className="flex items-center gap-2">
+                  <FaPhone /> <strong>Phone:</strong>{" "}
+                  {selectedOrder.customerPhone}
+                </p>
+                <p className="flex items-center gap-2">
+                  <FaHome /> <strong>Billing:</strong>{" "}
+                  {selectedOrder.billingAddress || "N/A"}
+                </p>
+                <p className="flex items-center gap-2">
+                  <FaStickyNote /> <strong>Notes:</strong>{" "}
+                  {selectedOrder.additionalNotes || "N/A"}
+                </p>
+                <p className="flex items-center gap-2 ">
+                  <FaUser /> <strong>Staff Name:</strong>{" "}
+                  {selectedOrder.staffName}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="flex items-center gap-2">
+                  <FaCreditCard /> <strong>Payment:</strong>{" "}
+                  {selectedOrder.paymentMethod?.replace("-payment", "") ||
+                    "N/A"}
+                </p>
+                <p className="flex items-center gap-2">
+                  <FaMoneyBill /> <strong>Total:</strong> ৳
+                  {selectedOrder.orderTotalPrice?.toLocaleString("en-BD") ||
+                    "-"}
+                </p>
+                <p className="flex items-center gap-2">
+                  <FaTruck /> <strong>Delivery:</strong>{" "}
+                  {selectedOrder.deliveryMethod || "N/A"}
+                </p>
+                <p className="flex items-center gap-2">
+                  <FaCalendarAlt /> <strong>Delivery Date:</strong>{" "}
+                  {selectedOrder.deliveryDate
+                    ? new Date(selectedOrder.deliveryDate).toLocaleDateString()
+                    : "N/A"}
+                </p>
+                <p className="flex items-center gap-2">
+                  <FaClipboardList /> <strong>Status:</strong>{" "}
+                  {statusBadge(selectedOrder.status)}
+                </p>
+                {/* Display payment details if available */}
+                {selectedOrder.payments &&
+                  selectedOrder.payments.length > 0 && (
+                    <div className="mt-2 text-xs">
+                      <h5 className="font-semibold text-gray-600">
+                        Payment History:
+                      </h5>
+                      <ul className="list-disc ml-4">
+                        {selectedOrder.payments.map((payment, idx) => (
+                          <li key={idx}>
+                            ৳{payment.amount?.toLocaleString("en-BD")} via{" "}
+                            {payment.paymentMethod?.replace("-payment", "")} (
+                            {payment.isPaid ? "Paid" : "Unpaid"}) on{" "}
+                            {new Date(payment.createdAt).toLocaleDateString()}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <FaClipboardList /> Order Items
+              </h4>
+              <ul className="list-disc ml-5 text-sm space-y-1">
+                {selectedOrder.orderItems?.length > 0 ? (
+                  selectedOrder.orderItems.map((item, idx) => (
+                    <li key={idx}>
+                      <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
+                      {item.quantity || 0}, Size:{" "}
+                      {item.widthInch && item.heightInch
+                        ? `${item.widthInch}x${item.heightInch} inch`
+                        : "N/A"}
+                      <div className="text-xs text-gray-500">
+                        SKU: {item.product?.sku || "N/A"} | Price: ৳
+                        {item.price?.toLocaleString("en-BD") || "0.00"}
+                      </div>
+                    </li>
+                  ))
+                ) : (
+                  <li>No items found for this order.</li>
+                )}
+              </ul>
+            </div>
+
+            <div className="modal-action mt-6">
+              <button
+                className="btn btn-sm btn-neutral rounded-md"
+                onClick={closeOrderDetailsModal}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </dialog>
+      )}
     </div>
   );
 }

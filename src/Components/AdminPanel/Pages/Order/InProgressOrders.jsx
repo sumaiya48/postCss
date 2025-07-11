@@ -6,6 +6,7 @@ import {
   FaSortAlphaDown,
   FaSortAlphaUp,
   FaColumns,
+  FaCalendarAlt, // Import calendar icon
   FaTimes,
   FaUser,
   FaEnvelope,
@@ -15,15 +16,15 @@ import {
   FaCreditCard,
   FaMoneyBill,
   FaTruck,
-  FaCalendarAlt,
   FaClipboardList, // Icons for order details modal
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
-import ColumnManager from "./ColumnManager"; // Import ColumnManager
-import DatePicker from "react-datepicker"; // Import DatePicker for consistency
-import "react-datepicker/dist/react-datepicker.css"; // Import DatePicker CSS for consistency
+import ColumnManager from "./ColumnManager";
+import DatePicker from "react-datepicker"; // Import DatePicker
+import "react-datepicker/dist/react-datepicker.css"; // Import DatePicker CSS
 import InvoiceDownloadButton from "./InvoiceDownloadButton"; // Import InvoiceDownloadButton for the details modal
 
+// Utility function to render status badges (can be moved to a shared utility file if desired)
 const statusBadge = (status) => {
   const badgeClass =
     "badge px-2 py-0.5 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]";
@@ -34,7 +35,7 @@ const statusBadge = (status) => {
           Pending
         </span>
       );
-    case "partial":
+    case "partial": // Added partial payment status
       return (
         <span className={`${badgeClass} badge-info badge-outline`}>
           Partial
@@ -42,6 +43,50 @@ const statusBadge = (status) => {
       );
     case "paid":
       return <span className={`${badgeClass} badge-success`}>Paid</span>;
+    case "order-request-received":
+      return <span className={`${badgeClass} badge-secondary`}>Request</span>;
+    case "consultation-in-progress":
+      return <span className={`${badgeClass} badge-primary`}>Consulting</span>;
+    case "awaiting-advance-payment":
+      return (
+        <span className={`${badgeClass} badge-warning`}>Awaiting Advance</span>
+      );
+    case "advance-payment-received":
+      return (
+        <span className={`${badgeClass} badge-info`}>Advance Received</span>
+      );
+    case "design-in-progress":
+      return (
+        <span className={`${badgeClass} badge-accent`}>Design In Progress</span>
+      );
+    case "awaiting-design-approval":
+      return (
+        <span className={`${badgeClass} badge-warning`}>
+          Awaiting Design Approval
+        </span>
+      );
+    case "production-started":
+      return (
+        <span className={`${badgeClass} badge-info`}>Production Started</span>
+      );
+    case "production-in-progress":
+      return (
+        <span className={`${badgeClass} badge-info`}>
+          Production In Progress
+        </span>
+      );
+    case "ready-for-delivery":
+      return (
+        <span className={`${badgeClass} badge-success`}>
+          Ready For Delivery
+        </span>
+      );
+    case "out-for-delivery":
+      return (
+        <span className={`${badgeClass} badge-primary`}>Out For Delivery</span>
+      );
+    case "order-completed":
+      return <span className={`${badgeClass} badge-success`}>Completed</span>;
     case "order-canceled":
       return <span className={`${badgeClass} badge-error`}>Canceled</span>;
     default:
@@ -128,7 +173,7 @@ const ALL_COLUMNS = [
     id: "status",
     label: "Order Status",
     dataKey: "status",
-    isSortable: false,
+    isSortable: true,
     defaultVisible: true,
     render: (order) => statusBadge(order.status),
   },
@@ -139,6 +184,7 @@ const ALL_COLUMNS = [
     isSortable: false,
     defaultVisible: false,
   },
+  // Added deliveryDate to ALL_COLUMNS and made it dynamically editable
   {
     id: "deliveryDate",
     label: "Delivery Date",
@@ -149,7 +195,7 @@ const ALL_COLUMNS = [
       order.deliveryDate
         ? new Date(order.deliveryDate).toLocaleDateString()
         : "N/A",
-  }, // Added for consistency
+  },
   {
     id: "createdAt",
     label: "Created",
@@ -161,7 +207,7 @@ const ALL_COLUMNS = [
   },
   {
     id: "updatedAt",
-    label: "Cancelled",
+    label: "Last Updated",
     dataKey: "updatedAt",
     isSortable: true,
     defaultVisible: true,
@@ -217,10 +263,20 @@ const ALL_COLUMNS = [
   },
 ];
 
-// Define a unique localStorage key for this page's column configuration
-const LOCAL_STORAGE_COLUMNS_KEY = "orders_cancelled_page_columns";
+const IN_PROGRESS_STATUSES = [
+  "advance-payment-received", // Now explicitly includes this status
+  "design-in-progress",
+  "awaiting-design-approval",
+  "production-started",
+  "production-in-progress",
+  "ready-for-delivery",
+  "out-for-delivery",
+];
 
-export default function CancelledOrders() {
+// Define a unique localStorage key for this page's column configuration
+const LOCAL_STORAGE_COLUMNS_KEY = "orders_in_progress_page_columns";
+
+export default function InProgressOrders() {
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -286,22 +342,26 @@ export default function CancelledOrders() {
     setError(null);
     try {
       const token = localStorage.getItem("authToken");
-      const url = "https://test.api.dpmsign.com/api/order?filteredBy=cancelled";
+      // Fetch all orders and then filter locally for in-progress statuses
+      const url = "https://test.api.dpmsign.com/api/order";
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      if (!res.ok) throw new Error("Failed to fetch cancelled orders");
+      if (!res.ok) throw new Error("Failed to fetch orders");
       const data = await res.json();
-      const cancelled = (data.data.orders || [])
-        .filter((o) => o.status === "order-canceled")
+
+      // Filter to include only defined in-progress statuses
+      const inProgress = (data.data.orders || [])
+        .filter((o) => IN_PROGRESS_STATUSES.includes(o.status))
         .map((order) => ({
           ...order,
-          staffName: staffMap[order.staffId] || "N/A", // Add staffName to order object
+          staffName: staffMap[order.staffId] || "N/A",
         }));
-      setOrders(cancelled);
-      applyFiltersAndSort(cancelled, searchTerm, sortField, sortAsc);
+
+      setOrders(inProgress);
+      applyFiltersAndSort(inProgress, searchTerm, sortField, sortAsc);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -362,8 +422,8 @@ export default function CancelledOrders() {
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(filteredOrders);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "CancelledOrders");
-    XLSX.writeFile(workbook, "cancelled_orders.xlsx");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "InProgressOrders");
+    XLSX.writeFile(workbook, "in_progress_orders.xlsx");
   };
 
   const exportToCSV = () => {
@@ -372,8 +432,9 @@ export default function CancelledOrders() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", "cancelled_orders.csv");
+    link.setAttribute("download", "in_progress_orders.csv");
     document.body.appendChild(link);
+    link.click();
     document.body.removeChild(link);
   };
 
@@ -385,6 +446,83 @@ export default function CancelledOrders() {
     setSortAsc(asc);
   };
 
+  // Handler for delivery date change
+  const handleDeliveryDateChange = async (orderId, date) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(
+        `https://test.api.dpmsign.com/api/order/update-order`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            orderId: orderId,
+            deliveryDate: date.toISOString(), // Send date in ISO format
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to update delivery date");
+      }
+
+      // Update the order in the local state immediately
+      setOrders((prevOrders) =>
+        prevOrders.map((o) =>
+          o.orderId === orderId ? { ...o, deliveryDate: date.toISOString() } : o
+        )
+      );
+      console.log("Delivery date updated successfully!");
+    } catch (err) {
+      console.error("Error updating delivery date:", err.message);
+    }
+  };
+
+  const handleStatusChange = async (orderId, newStatus) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(
+        `https://test.api.dpmsign.com/api/order/update-order`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            orderId: orderId,
+            status: newStatus,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to update status");
+      }
+
+      // If status changes to completed/canceled, remove from this view
+      const statusRemovesFromPage =
+        newStatus === "order-completed" || newStatus === "order-canceled";
+
+      if (statusRemovesFromPage) {
+        setOrders((prevOrders) =>
+          prevOrders.filter((o) => o.orderId !== orderId)
+        );
+      } else {
+        fetchOrders(); // Re-fetch to update status in current view (e.g., if it moves to another in-progress stage)
+      }
+
+      console.log("Order status updated successfully!");
+    } catch (err) {
+      console.error("Error updating order status:", err.message);
+    }
+  };
+
   // Function to close the general order details modal
   const closeOrderDetailsModal = () => setSelectedOrder(null);
 
@@ -393,10 +531,10 @@ export default function CancelledOrders() {
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 mb-1">
-            ❌ Cancelled Orders
+            ⏳ In Progress Orders
           </h1>
           <p className="text-sm text-gray-500">
-            Orders marked as canceled. You can search, sort, or export them.
+            Orders that are currently being processed or awaiting action.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
@@ -438,15 +576,15 @@ export default function CancelledOrders() {
       <div className="overflow-x-auto bg-white rounded-xl shadow-md max-h-[calc(100vh-200px)] overflow-y-auto">
         {loading ? (
           <div className="p-8 text-center text-sm text-gray-600">
-            Loading cancelled orders...
+            Loading in progress orders...
           </div>
         ) : error ? (
           <div className="p-8 text-center text-error text-sm font-medium">
-            {error}
+            Error: {error}
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">
-            No cancelled orders found.
+            No in progress orders found.
           </div>
         ) : (
           <table className="table table-xs table-pin-rows">
@@ -470,7 +608,7 @@ export default function CancelledOrders() {
                       ))}
                   </th>
                 ))}
-                {/* Removed the static 'Actions' column header */}
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -485,7 +623,7 @@ export default function CancelledOrders() {
                           : ""
                       }
                     >
-                      {/* Render custom date picker for deliveryDate column (read-only for cancelled) */}
+                      {/* Render custom date picker for deliveryDate column */}
                       {col.id === "deliveryDate" ? (
                         <div className="relative flex items-center">
                           <DatePicker
@@ -494,10 +632,12 @@ export default function CancelledOrders() {
                                 ? new Date(order.deliveryDate)
                                 : null
                             }
+                            onChange={(date) =>
+                              handleDeliveryDateChange(order.orderId, date)
+                            }
                             dateFormat="yyyy/MM/dd"
                             className="input input-xs input-bordered w-full pr-6"
                             wrapperClassName="w-full"
-                            disabled // Make it read-only
                           />
                           <FaCalendarAlt className="absolute right-2 text-gray-400 pointer-events-none" />
                         </div>
@@ -512,7 +652,41 @@ export default function CancelledOrders() {
                       )}
                     </td>
                   ))}
-                  {/* The actions column content is now handled by the dynamic columns */}
+                  <td className="relative">
+                    <details className="dropdown dropdown-end">
+                      <summary className="btn btn-xs btn-outline capitalize">
+                        {order.status.replace(/-/g, " ")}
+                      </summary>
+                      <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 text-xs">
+                        {[
+                          "advance-payment-received", // This page starts from here or later
+                          "design-in-progress",
+                          "awaiting-design-approval",
+                          "production-started",
+                          "production-in-progress",
+                          "ready-for-delivery",
+                          "out-for-delivery",
+                          "order-completed",
+                          "order-canceled",
+                        ].map((statusOption) => (
+                          <li key={statusOption}>
+                            <button
+                              onClick={() =>
+                                handleStatusChange(order.orderId, statusOption)
+                              }
+                              className={`capitalize ${
+                                statusOption === order.status
+                                  ? "text-primary font-bold"
+                                  : ""
+                              }`}
+                            >
+                              {statusOption.replace(/-/g, " ")}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </td>
                 </tr>
               ))}
             </tbody>

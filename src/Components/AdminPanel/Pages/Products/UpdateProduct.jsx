@@ -1,7 +1,17 @@
+// UpdateProduct.jsx
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
+import * as XLSX from "xlsx"; // Import XLSX for Excel handling
+
+// Import new components (assuming they are in the same directory or accessible)
+// import ProductBasicInfo from "./ProductBasicInfo"; // Not directly used here, but good to note
+// import ProductTags from "./ProductTags"; // Not directly used here, but good to note
+import ProductAttributes from "./ProductAttributes"; // We will use this component
+// import ProductVariations from "./ProductVariations"; // Not directly used here, but good to note
+// import ProductVariants from "./ProductVariants"; // Not directly used here, but good to note
+// import ProductImages from "./ProductImages"; // Not directly used here, but good to note
 
 export default function UpdateProduct() {
   const { productId } = useParams();
@@ -22,7 +32,6 @@ export default function UpdateProduct() {
     minOrderQuantity: "",
     discountStart: null,
     discountEnd: null,
-    // REMOVED: discountPercentage: null,
     maxDiscountPercentage: null,
     pricingType: "flat",
     isActive: true,
@@ -42,7 +51,7 @@ export default function UpdateProduct() {
       if (productId) await fetchProductDetails(productId);
       setLoading(false);
     })();
-  }, [productId]);
+  }, [productId]); // Add allFetchedCategories to dependencies to ensure it's loaded before fetchProductDetails
 
   async function fetchCategories() {
     try {
@@ -68,6 +77,29 @@ export default function UpdateProduct() {
         }
       );
       const p = res.data.data.product;
+
+      // Handle category and subcategory population
+      const productCategoryId = p.categoryId;
+      let parentCategoryId = null;
+      let actualCategoryId = productCategoryId; // This will be the subcategoryId if applicable
+
+      const foundCategory = allFetchedCategories.find(
+        (cat) => cat.categoryId === productCategoryId
+      );
+
+      if (foundCategory && foundCategory.parentCategoryId !== null) {
+        // This is a subcategory, so its parent is the actual category to select in the first dropdown
+        parentCategoryId = foundCategory.parentCategoryId;
+        setSubCategories(
+          allFetchedCategories.find(
+            (cat) => cat.categoryId === parentCategoryId
+          )?.subCategories || []
+        );
+      } else {
+        // This is a top-level category or no category found
+        setSubCategories(foundCategory?.subCategories || []);
+      }
+
       setBasic({
         name: p.name,
         description: p.description,
@@ -77,44 +109,18 @@ export default function UpdateProduct() {
         isActive: p.isActive,
         discountStart: p.discountStart,
         discountEnd: p.discountEnd,
-        // REMOVED: discountPercentage: p.discountPercentage,
         maxDiscountPercentage: p.maxDiscountPercentage,
-        categoryId: p.categoryId || "",
+        categoryId: parentCategoryId || productCategoryId || "", // Set the parent category ID or the product's own category ID
+        subCategoryId: parentCategoryId ? productCategoryId : null, // Set the subcategory ID if applicable
         sku: p.sku || "",
       });
-
-      // Determine parent category and set subcategories based on the fetched product's categoryId
-      const selectedCategory = allFetchedCategories.find(
-        (cat) => cat.categoryId === p.categoryId
-      );
-      if (selectedCategory && selectedCategory.parentCategoryId !== null) {
-        // If the product's category is a sub-category, find its parent
-        const parentOfSubCategory = allFetchedCategories.find(
-          (cat) => cat.categoryId === selectedCategory.parentCategoryId
-        );
-        setSubCategories(parentOfSubCategory?.subCategories || []);
-        // Set both parent and sub-category for the dropdowns
-        setBasic((prev) => ({
-          ...prev,
-          categoryId: parentOfSubCategory.categoryId,
-          subCategoryId: p.categoryId,
-        }));
-      } else {
-        // If it's a top-level category or no sub-category, set just categoryId
-        setSubCategories(selectedCategory?.subCategories || []);
-        setBasic((prev) => ({
-          ...prev,
-          categoryId: p.categoryId,
-          subCategoryId: null,
-        }));
-      }
 
       setTags(p.tags?.map((t) => t.tag) || []);
       setAttributes(
         p.attributes?.map((a) => ({
           property: a.property,
           description: a.description,
-          attributeId: a.attributeId,
+          attributeId: a.attributeId, // Keep attributeId for existing attributes
         })) || []
       );
       setVariations(
@@ -199,6 +205,41 @@ export default function UpdateProduct() {
   const removeAttr = (i) =>
     setAttributes((prev) => prev.filter((_, idx) => idx !== i));
 
+  // New: handleExcelUpload for attributes
+  const handleExcelUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet);
+
+        const parsedAttributes = json
+          .map((row) => ({
+            property: row.Property,
+            description: row.Description,
+          }))
+          .filter((attr) => attr.property && attr.description);
+
+        setAttributes((prev) => [...prev, ...parsedAttributes]);
+        Swal.fire("Success", "Attributes loaded from Excel!", "success");
+      } catch (error) {
+        console.error("Error processing Excel file:", error);
+        Swal.fire(
+          "Error",
+          "Failed to process Excel file. Ensure it's a valid format with 'Property' and 'Description' columns.",
+          "error"
+        );
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   // Variation handlers
   const addVar = () =>
     setVariations((prev) => [
@@ -206,7 +247,7 @@ export default function UpdateProduct() {
       { name: "", unit: "", variationItems: [] },
     ]);
   const updateVar = (i, field, value) =>
-    setVariations((prev) =>
+    setVariatios((prev) =>
       prev.map((v, idx) => (idx === i ? { ...v, [field]: value } : v))
     );
   const addVarItem = (i) => {
@@ -350,13 +391,6 @@ export default function UpdateProduct() {
           ? Number(basic.discountEnd)
           : ""
       );
-      // REMOVED: discountPercentage from payload
-      // formData.append(
-      //   "discountPercentage",
-      //   basic.discountPercentage !== null && basic.discountPercentage !== ""
-      //     ? Number(basic.discountPercentage)
-      //     : ""
-      // );
       formData.append(
         "maxDiscountPercentage",
         basic.maxDiscountPercentage !== null &&
@@ -366,19 +400,33 @@ export default function UpdateProduct() {
       );
 
       // Append stringified arrays for complex data (tags, attributes, variations, variants)
+      // MODIFIED: Attributes handling for update
       formData.append(
         "attributes",
-        JSON.stringify(attributes.map(({ attributeId, ...a }) => a))
-      ); // Remove attributeId for new attributes
+        JSON.stringify(
+          attributes.map((a) => ({
+            // Only include attributeId if it exists (for existing attributes)
+            ...(a.attributeId && { attributeId: a.attributeId }),
+            property: a.property,
+            description: a.description,
+          }))
+        )
+      );
       formData.append("tags", JSON.stringify(tags));
       formData.append(
         "variations",
         JSON.stringify(
           variations.map(({ variationItems, variationId, ...v }) => ({
+            // Keep variationId for existing variations, remove for new ones
+            ...(variationId && { variationId }),
             ...v,
             variationItems: variationItems.map(
-              ({ variationItemId, ...vi }) => vi
-            ), // Remove variationItemId for new variation items
+              ({ variationItemId, ...vi }) => ({
+                // Keep variationItemId for existing variation items, remove for new ones
+                ...(variationItemId && { variationItemId }),
+                ...vi,
+              })
+            ),
           }))
         )
       );
@@ -386,11 +434,17 @@ export default function UpdateProduct() {
         "variants",
         JSON.stringify(
           variants.map(({ productVariantId, variantDetails, ...v }) => ({
+            // Keep productVariantId for existing variants, remove for new ones
+            ...(productVariantId && { productVariantId }),
             ...v,
             additionalPrice: Number(v.additionalPrice) || 0, // Ensure additionalPrice is a number
             variantDetails: variantDetails.map(
-              ({ productVariantDetailId, ...d }) => d
-            ), // Remove productVariantDetailId for new variant details
+              ({ productVariantDetailId, ...d }) => ({
+                // Keep productVariantDetailId for existing variant details, remove for new ones
+                ...(productVariantDetailId && { productVariantDetailId }),
+                ...d,
+              })
+            ),
           }))
         )
       );
@@ -564,24 +618,6 @@ export default function UpdateProduct() {
                 placeholder="Enter discount end amount"
               />
             </div>
-            {/* REMOVED: Discount Percentage input field */}
-            {/*
-            <div>
-              <label className="block mb-1 font-medium text-gray-700">
-                Discount Percentage (Optional)
-              </label>
-              <input
-                name="discountPercentage"
-                type="number"
-                value={basic.discountPercentage || ""}
-                onChange={handleBasicChange}
-                className="input input-bordered w-full"
-                min={0}
-                max={100}
-                placeholder="Enter discount percentage (0-100)"
-              />
-            </div>
-            */}
             <div>
               <label className="block mb-1 font-medium text-gray-700">
                 Max Discount Percentage (Optional)
@@ -778,46 +814,14 @@ export default function UpdateProduct() {
           </button>
         </section>
 
-        {/* Attributes Section */}
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold border-b pb-2 border-gray-300">
-            Attributes
-          </h2>
-          {attributes.length === 0 && (
-            <p className="text-gray-500 mb-2">No attributes added yet.</p>
-          )}
-          {attributes.map((a, i) => (
-            <div key={i} className="flex gap-3 mb-2">
-              <input
-                placeholder="Property"
-                value={a.property}
-                onChange={(e) => updateAttr(i, "property", e.target.value)}
-                className="input input-bordered flex-1"
-              />
-              <input
-                placeholder="Description"
-                value={a.description}
-                onChange={(e) => updateAttr(i, "description", e.target.value)}
-                className="input input-bordered flex-1"
-              />
-              <button
-                type="button"
-                onClick={() => removeAttr(i)}
-                className="btn btn-sm btn-error"
-                title="Remove Attribute"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={addAttr}
-            className="btn btn-sm btn-secondary mt-2"
-          >
-            + Add Attribute
-          </button>
-        </section>
+        {/* Attributes Section (Integrated ProductAttributes component) */}
+        <ProductAttributes
+          attributes={attributes}
+          updateAttr={updateAttr}
+          removeAttr={removeAttr}
+          addAttr={addAttr}
+          handleExcelUpload={handleExcelUpload} // Pass the new handler
+        />
 
         {/* Variations Section */}
         <section className="space-y-4">

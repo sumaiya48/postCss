@@ -36,7 +36,7 @@ export default function OrderSummary({
           selectedItems.map(
             (
               item,
-              index // Added index for map key to differentiate identical items if productVariantId is null
+              index // Simplified conditional rendering
             ) => (
               <tr
                 key={`${item.productId}-${item.widthInch || "no-w"}-${

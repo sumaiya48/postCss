@@ -30,7 +30,6 @@ export default function ProductPriceCalculator({
   const isSquareFeet = product.pricingType === "square-feet";
 
   const calculatePrice = useCallback(() => {
-    // START MODIFICATION HERE
     let effectivePricePerUnitOrSqFt = Number(product.basePrice || 0);
     // If a variant is selected, add its additional price to the effective base price per unit/sq.ft.
     if (selectedVariant) {
@@ -38,7 +37,6 @@ export default function ProductPriceCalculator({
         selectedVariant.additionalPrice || 0
       );
     }
-    // END MODIFICATION HERE
 
     const discountStart = Number(product.discountStart || 0);
     const discountEnd = Number(product.discountEnd || 0);
@@ -56,9 +54,16 @@ export default function ProductPriceCalculator({
       setTotalAreaSqFt(quantity);
     }
 
-    // Now, 'calculatedBasePrice' will be the effective price (base + variant additional) * area/quantity
-    let priceBeforeDiscount =
-      currentAreaOrQuantity * effectivePricePerUnitOrSqFt;
+    // NOW, 'calculatedBasePrice' will be the effective price (base + variant additional) * area/quantity
+    let priceBeforeDiscount;
+    if (isSquareFeet) {
+      // For square-feet products, multiply the area-based price by the quantity
+      priceBeforeDiscount =
+        currentAreaOrQuantity * effectivePricePerUnitOrSqFt * Number(quantity); // MODIFIED LINE
+    } else {
+      // For flat products, price is based on quantity directly
+      priceBeforeDiscount = currentAreaOrQuantity * effectivePricePerUnitOrSqFt;
+    }
 
     setCalculatedBasePrice(priceBeforeDiscount);
 

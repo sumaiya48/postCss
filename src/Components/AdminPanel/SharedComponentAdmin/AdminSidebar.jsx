@@ -33,10 +33,11 @@ const menuItems = [
     label: "Order",
     icon: <FaTags />,
     children: [
-      { label: "All Orders", path: "/orders/all" },
-      { label: "Pending", path: "/orders/neworder" },
+      { label: "New Request", path: "/orders/new-request" }, // Updated path and label
+      { label: "In Progress", path: "/orders/in-progress" }, // New item added
       { label: "Completed", path: "/orders/completed" },
-      { label: "Cancelled", path: "/orders/cancelledorder" },
+      { label: "Cancelled", path: "/orders/cancelled" }, // Updated path
+      { label: "All Orders", path: "/orders/all" },
     ],
   },
   {
@@ -62,7 +63,6 @@ const menuItems = [
   { label: "FAQ", icon: <FaQuestionCircle />, path: "/faq" },
 ];
 
-
 export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
   const navigate = useNavigate();
   const [searchText, setSearchText] = useState("");
@@ -75,7 +75,8 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
 
   // Filter menu items based on search text (case-insensitive)
   const filteredMenuItems = menuItems.filter((item) => {
-    if (item.label.toLowerCase().includes(searchText.toLowerCase())) return true;
+    if (item.label.toLowerCase().includes(searchText.toLowerCase()))
+      return true;
     if (item.children) {
       // Check if any child matches
       return item.children.some((child) =>
@@ -138,7 +139,9 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
                 <ul className="menu menu-sm p-0 pl-8">
                   {item.children
                     .filter((child) =>
-                      child.label.toLowerCase().includes(searchText.toLowerCase())
+                      child.label
+                        .toLowerCase()
+                        .includes(searchText.toLowerCase())
                     )
                     .map((child) => (
                       <li key={child.label}>
@@ -146,7 +149,9 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
                           to={child.path}
                           className={({ isActive }) =>
                             `py-2 rounded-none ${
-                              isActive ? "bg-blue-100 text-blue-700 font-semibold" : ""
+                              isActive
+                                ? "bg-blue-100 text-blue-700 font-semibold"
+                                : ""
                             }`
                           }
                         >
@@ -165,7 +170,9 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }) {
                 `flex items-center gap-3 p-3 rounded-lg text-sm transition-colors hover:bg-gray-100 ${
                   isCollapsed ? "justify-center" : ""
                 } ${
-                  isActive ? "bg-blue-500 text-white font-semibold shadow" : "text-gray-600"
+                  isActive
+                    ? "bg-blue-500 text-white font-semibold shadow"
+                    : "text-gray-600"
                 }`
               }
               title={isCollapsed ? item.label : ""}

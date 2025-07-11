@@ -104,15 +104,9 @@ export default function POSDashboard() {
   // MODIFIED: calculateItemTotal will use the 'calculatedItemTotal' passed from the modal
   // or re-calculate based on customUnitPrice and new quantity/dimensions if changed in OrderSummary
   const calculateItemTotal = useCallback((item) => {
-    // If the item comes directly from the modal, it will have 'calculatedItemTotal'
-    // This `calculatedItemTotal` already includes all discounts and variant prices from the modal.
-    // Use this as the primary source for the item's total.
-    if (
-      item.calculatedItemTotal !== undefined &&
-      item.calculatedItemTotal !== null
-    ) {
-      return item.calculatedItemTotal;
-    }
+    // Always recalculate based on current item properties (quantity, customUnitPrice, dimensions).
+    // The 'calculatedItemTotal' from the modal is a snapshot at the time of adding;
+    // we need to re-evaluate it if inputs are changed in OrderSummary.
 
     // Otherwise, recalculate if inputs were changed in OrderSummary.
     // The `customUnitPrice` should reflect the price per unit/sqft *after* variant additions.
