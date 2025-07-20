@@ -424,20 +424,17 @@ export default function POSDashboard() {
         ) {
           // If existing and not square-feet (which might need unique entries per dimension), update quantity
           // For flat products, sum up quantities and calculate new total.
+          // For simplicity, if unit prices are different on re-add, create new item.
+          // If unit prices are the same, combine quantities and recalculate total.
           const updated = [...prev];
           const existing = updated[existingItemIndex];
 
-          // Recalculate combined total
-          const newTotalQuantity = existing.quantity + itemToAdd.quantity;
           let newCalculatedItemTotal;
           let newCalculatedBasePrice;
           let newDiscountAmount;
 
-          // If the customUnitPrice is consistent, recalculate total based on new quantity.
-          // Otherwise, it implies different pricing, so maybe it should be a new line item.
-          // For simplicity, if unit prices are different on re-add, create new item.
-          // If unit prices are the same, combine quantities and recalculate total.
           if (existing.customUnitPrice === itemToAdd.customUnitPrice) {
+            const newTotalQuantity = existing.quantity + itemToAdd.quantity;
             // Reapply the discount logic here based on new total quantity
             const pricePerUnitOrSqFt = Number(
               existing.customUnitPrice || existing.basePrice || 0
@@ -567,6 +564,8 @@ export default function POSDashboard() {
         // Send the final calculated total for this specific line item to the backend.
         // The backend will then sum these values for the overall order total.
         price: Number(item.calculatedItemTotal),
+        basePriceBeforeDiscount: Number(item.calculatedBasePrice), // NEW: Pass this
+        itemDiscountAmount: Number(item.discountAmount), // NEW: Pass this
       })),
     };
 

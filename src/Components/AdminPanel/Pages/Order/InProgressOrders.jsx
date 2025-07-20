@@ -19,252 +19,20 @@ import {
   FaClipboardList, // Icons for order details modal
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
-import ColumnManager from "./ColumnManager";
 import DatePicker from "react-datepicker"; // Import DatePicker
 import "react-datepicker/dist/react-datepicker.css"; // Import DatePicker CSS
-import InvoiceDownloadButton from "./InvoiceDownloadButton"; // Import InvoiceDownloadButton for the details modal
+import Swal from "sweetalert2"; // Ensure SweetAlert2 is imported for enhanced prompts
 
-// Utility function to render status badges (can be moved to a shared utility file if desired)
-const statusBadge = (status) => {
-  const badgeClass =
-    "badge px-2 py-0.5 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]";
-  switch (status) {
-    case "pending":
-      return (
-        <span className={`${badgeClass} badge-error badge-outline`}>
-          Pending
-        </span>
-      );
-    case "partial": // Added partial payment status
-      return (
-        <span className={`${badgeClass} badge-info badge-outline`}>
-          Partial
-        </span>
-      );
-    case "paid":
-      return <span className={`${badgeClass} badge-success`}>Paid</span>;
-    case "order-request-received":
-      return <span className={`${badgeClass} badge-secondary`}>Request</span>;
-    case "consultation-in-progress":
-      return <span className={`${badgeClass} badge-primary`}>Consulting</span>;
-    case "awaiting-advance-payment":
-      return (
-        <span className={`${badgeClass} badge-warning`}>Awaiting Advance</span>
-      );
-    case "advance-payment-received":
-      return (
-        <span className={`${badgeClass} badge-info`}>Advance Received</span>
-      );
-    case "design-in-progress":
-      return (
-        <span className={`${badgeClass} badge-accent`}>Design In Progress</span>
-      );
-    case "awaiting-design-approval":
-      return (
-        <span className={`${badgeClass} badge-warning`}>
-          Awaiting Design Approval
-        </span>
-      );
-    case "production-started":
-      return (
-        <span className={`${badgeClass} badge-info`}>Production Started</span>
-      );
-    case "production-in-progress":
-      return (
-        <span className={`${badgeClass} badge-info`}>
-          Production In Progress
-        </span>
-      );
-    case "ready-for-delivery":
-      return (
-        <span className={`${badgeClass} badge-success`}>
-          Ready For Delivery
-        </span>
-      );
-    case "out-for-delivery":
-      return (
-        <span className={`${badgeClass} badge-primary`}>Out For Delivery</span>
-      );
-    case "order-completed":
-      return <span className={`${badgeClass} badge-success`}>Completed</span>;
-    case "order-canceled":
-      return <span className={`${badgeClass} badge-error`}>Canceled</span>;
-    default:
-      return <span className={`${badgeClass} badge-ghost`}>{status}</span>;
-  }
-};
+// Adjusted Import Paths for ColumnManager, InvoiceDownloadButton, PaymentModal
+import ColumnManager from "./ColumnManager";
+import InvoiceDownloadButton from "./InvoiceDownloadButton";
+import PaymentModal from "./PaymentModal"; // Ensure PaymentModal is imported
 
-// Define all possible columns with their properties (consistent across all order pages)
-const ALL_COLUMNS = [
-  {
-    id: "orderId",
-    label: "Order ID",
-    dataKey: "orderId",
-    isSortable: true,
-    defaultVisible: true,
-  },
-  {
-    id: "customerName",
-    label: "Customer",
-    dataKey: "customerName",
-    isSortable: true,
-    defaultVisible: true,
-  },
-  {
-    id: "customerPhone",
-    label: "Phone",
-    dataKey: "customerPhone",
-    isSortable: false,
-    defaultVisible: true,
-  },
-  {
-    id: "billingAddress",
-    label: "Address",
-    dataKey: "billingAddress",
-    isSortable: false,
-    defaultVisible: true,
-  },
-  {
-    id: "orderItemsCount",
-    label: "Items",
-    dataKey: "orderItemsCount",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.orderItems?.length || 0,
-  },
-  {
-    id: "orderTotalPrice",
-    label: "Total (৳)",
-    dataKey: "orderTotalPrice",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => order.orderTotalPrice?.toLocaleString("en-BD") || "-",
-  },
-  // Added "Due" column
-  {
-    id: "amountDue",
-    label: "Due (৳)",
-    dataKey: "amountDue",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      (
-        order.orderTotalPrice -
-        (order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)
-      )?.toLocaleString("en-BD") || "-",
-  },
-  {
-    id: "paymentMethod",
-    label: "Payment Method",
-    dataKey: "paymentMethod",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.paymentMethod?.replace("-payment", "") || "-",
-  },
-  {
-    id: "paymentStatus",
-    label: "Payment Status",
-    dataKey: "paymentStatus",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => statusBadge(order.paymentStatus),
-  },
-  {
-    id: "status",
-    label: "Order Status",
-    dataKey: "status",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => statusBadge(order.status),
-  },
-  {
-    id: "deliveryMethod",
-    label: "Delivery Method",
-    dataKey: "deliveryMethod",
-    isSortable: false,
-    defaultVisible: false,
-  },
-  // Added deliveryDate to ALL_COLUMNS and made it dynamically editable
-  {
-    id: "deliveryDate",
-    label: "Delivery Date",
-    dataKey: "deliveryDate",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      order.deliveryDate
-        ? new Date(order.deliveryDate).toLocaleDateString()
-        : "N/A",
-  },
-  {
-    id: "createdAt",
-    label: "Created",
-    dataKey: "createdAt",
-    isSortable: true,
-    defaultVisible: false,
-    render: (order) =>
-      order.createdAt ? new Date(order.createdAt).toLocaleString() : "-",
-  },
-  {
-    id: "updatedAt",
-    label: "Last Updated",
-    dataKey: "updatedAt",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      order.updatedAt ? new Date(order.updatedAt).toLocaleString() : "-",
-  },
-  {
-    id: "customerEmail",
-    label: "Email",
-    dataKey: "customerEmail",
-    isSortable: true,
-    defaultVisible: false,
-  },
-  {
-    id: "additionalNotes",
-    label: "Notes",
-    dataKey: "additionalNotes",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.additionalNotes || "N/A",
-  },
-  {
-    id: "staffName",
-    label: "Agent",
-    dataKey: "staffName",
-    isSortable: true,
-    defaultVisible: false,
-  },
-  {
-    id: "orderDetails",
-    label: "Details",
-    dataKey: "orderDetails",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order, setSelectedOrder) => (
-      <button
-        onClick={() => setSelectedOrder(order)}
-        className="btn btn-outline btn-xs bg-blue-700 text-white"
-      >
-        View
-      </button>
-    ),
-  },
-  {
-    id: "invoiceDownload",
-    label: "Invoice",
-    dataKey: "invoiceDownload",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order) => (
-      <InvoiceDownloadButton order={order} staffName={order.staffName} />
-    ),
-  },
-];
+// Import the centralized column definitions and status badge utility
+import { ALL_COLUMNS, statusBadge } from "./columnDefinitions";
 
 const IN_PROGRESS_STATUSES = [
-  "advance-payment-received", // Now explicitly includes this status
+  "advance-payment-received",
   "design-in-progress",
   "awaiting-design-approval",
   "production-started",
@@ -283,32 +51,33 @@ export default function InProgressOrders() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("updatedAt");
-  const [sortAsc, setSortAsc] = useState(false); // Default to descending for 'updatedAt'
+  const [sortAsc, setSortAsc] = useState(false);
   const [showColumnManager, setShowColumnManager] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null); // State for general order details modal
 
+  // NEW STATE: For managing payment modal
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedOrderForPayment, setSelectedOrderForPayment] = useState(null);
+  // NEW STATE: To manually update status after payment (if not fully paid)
+  const [manualStatusUpdateOrder, setManualStatusUpdateOrder] = useState(null);
+
   // State to manage which columns are currently visible in the table
-  // Initialized by attempting to load from localStorage, falling back to defaultVisible columns.
   const [visibleColumns, setVisibleColumns] = useState(() => {
     try {
       const savedColumns = localStorage.getItem(LOCAL_STORAGE_COLUMNS_KEY);
       if (savedColumns) {
         const parsedColumns = JSON.parse(savedColumns);
-        // Ensure parsed columns are still valid and map to full column objects
         return parsedColumns
           .map((id) => ALL_COLUMNS.find((col) => col.id === id))
           .filter(Boolean);
       }
     } catch (e) {
       console.error("Failed to parse visible columns from localStorage", e);
-      // Fallback to default if parsing fails
     }
     return ALL_COLUMNS.filter((col) => col.defaultVisible);
   });
 
-  // Effect to save visibleColumns to localStorage whenever it changes
   useEffect(() => {
-    // Only save the IDs of the visible columns to keep the stored data minimal
     localStorage.setItem(
       LOCAL_STORAGE_COLUMNS_KEY,
       JSON.stringify(visibleColumns.map((col) => col.id))
@@ -342,7 +111,6 @@ export default function InProgressOrders() {
     setError(null);
     try {
       const token = localStorage.getItem("authToken");
-      // Fetch all orders and then filter locally for in-progress statuses
       const url = "https://test.api.dpmsign.com/api/order";
       const res = await fetch(url, {
         headers: {
@@ -352,12 +120,11 @@ export default function InProgressOrders() {
       if (!res.ok) throw new Error("Failed to fetch orders");
       const data = await res.json();
 
-      // Filter to include only defined in-progress statuses
       const inProgress = (data.data.orders || [])
         .filter((o) => IN_PROGRESS_STATUSES.includes(o.status))
         .map((order) => ({
           ...order,
-          staffName: staffMap[order.staffId] || "N/A",
+          staffName: order.staff?.name || "N/A", // Correctly access staff name from nested object
         }));
 
       setOrders(inProgress);
@@ -434,7 +201,6 @@ export default function InProgressOrders() {
     link.href = URL.createObjectURL(blob);
     link.setAttribute("download", "in_progress_orders.csv");
     document.body.appendChild(link);
-    link.click();
     document.body.removeChild(link);
   };
 
@@ -460,7 +226,7 @@ export default function InProgressOrders() {
           },
           body: JSON.stringify({
             orderId: orderId,
-            deliveryDate: date.toISOString(), // Send date in ISO format
+            deliveryDate: date.toISOString(),
           }),
         }
       );
@@ -470,7 +236,6 @@ export default function InProgressOrders() {
         throw new Error(errorData.message || "Failed to update delivery date");
       }
 
-      // Update the order in the local state immediately
       setOrders((prevOrders) =>
         prevOrders.map((o) =>
           o.orderId === orderId ? { ...o, deliveryDate: date.toISOString() } : o
@@ -482,7 +247,64 @@ export default function InProgressOrders() {
     }
   };
 
+  // MODIFIED: handleStatusChange to intercept "add-payment" and "order-completed" logic
   const handleStatusChange = async (orderId, newStatus) => {
+    const orderToUpdate = orders.find((o) => o.orderId === orderId);
+
+    if (!orderToUpdate) return;
+
+    const totalPaid =
+      orderToUpdate.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+    const remainingDue = orderToUpdate.orderTotalPrice - totalPaid;
+
+    // --- NEW LOGIC FOR "ADD PAYMENT" ---
+    if (newStatus === "add-payment") {
+      // 'add-payment' is a special client-side status
+      setSelectedOrderForPayment(orderToUpdate);
+      setShowPaymentModal(true);
+      return; // Don't proceed with API call for this client-side action
+    }
+    // --- END NEW LOGIC ---
+
+    // Logic for 'order-completed' (only show payment modal IF there's a due amount and user wants to pay now)
+    // If attempting to mark as 'order-completed' AND there's a remaining balance
+    if (newStatus === "order-completed" && remainingDue > 0) {
+      // Prompt user about outstanding payment before forcing completion.
+      const confirmForceComplete = await Swal.fire({
+        title: "Balance Due!",
+        html: `Order #${
+          orderToUpdate.orderId
+        } still has ৳${remainingDue.toLocaleString(
+          "en-BD"
+        )} outstanding.<br/>Do you want to mark it as completed despite the balance?`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Yes, Complete Anyway",
+        cancelButtonText: "No, Keep as In Progress",
+      });
+
+      if (!confirmForceComplete.isConfirmed) {
+        return; // User cancelled, order status remains unchanged.
+      }
+      // If confirmed, proceed to update order status via API to 'order-completed'
+    }
+    // If attempting to mark as 'order-completed' AND there's NO remaining balance (already paid)
+    else if (newStatus === "order-completed" && remainingDue <= 0) {
+      const confirmCompletion = await Swal.fire({
+        title: "Confirm Completion?",
+        text: `Order #${orderToUpdate.orderId} is fully paid. Do you want to mark it as completed?`,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Yes, Complete It",
+        cancelButtonText: "No, Keep as is",
+      });
+
+      if (!confirmCompletion.isConfirmed) {
+        return; // User cancelled, do nothing
+      }
+      // If confirmed, proceed to update order status via API to 'order-completed'
+    }
+    // For any other status change (or if order-completed was confirmed with no due / force-completed with due)
     try {
       const token = localStorage.getItem("authToken");
       const res = await fetch(
@@ -505,7 +327,6 @@ export default function InProgressOrders() {
         throw new Error(errorData.message || "Failed to update status");
       }
 
-      // If status changes to completed/canceled, remove from this view
       const statusRemovesFromPage =
         newStatus === "order-completed" || newStatus === "order-canceled";
 
@@ -514,16 +335,114 @@ export default function InProgressOrders() {
           prevOrders.filter((o) => o.orderId !== orderId)
         );
       } else {
-        fetchOrders(); // Re-fetch to update status in current view (e.g., if it moves to another in-progress stage)
+        fetchOrders(); // Re-fetch to update status in current view
       }
 
-      console.log("Order status updated successfully!");
+      Swal.fire(
+        "Success",
+        `Order status updated to "${newStatus.replace(/-/g, " ")}"!`,
+        "success"
+      );
     } catch (err) {
       console.error("Error updating order status:", err.message);
+      Swal.fire(
+        "Error",
+        "Failed to update order status: " + err.message,
+        "error"
+      );
     }
   };
 
-  // Function to close the general order details modal
+  // NEW: Callback after payment is successfully recorded in PaymentModal
+  const handlePaymentSuccessAndStatusUpdate = async (orderIdFromModal) => {
+    setShowPaymentModal(false); // Close payment modal
+    setSelectedOrderForPayment(null); // Clear selected order for payment
+
+    try {
+      const token = localStorage.getItem("authToken");
+      // Fetch the specific order by ID using the corrected query format
+      const orderRes = await fetch(
+        `https://test.api.dpmsign.com/api/order?searchTerm=${orderIdFromModal}&searchBy=order-id`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (!orderRes.ok) {
+        const errorText = await orderRes.text();
+        console.error(
+          "Failed to fetch updated order after payment:",
+          errorText
+        );
+        throw new Error("Failed to fetch updated order details after payment.");
+      }
+
+      const updatedOrderData = await orderRes.json();
+      // Ensure that 'orders' array exists and has at least one element
+      const fetchedOrder =
+        updatedOrderData.orders && updatedOrderData.orders.length > 0
+          ? updatedOrderData.orders[0]
+          : null;
+
+      if (!fetchedOrder) {
+        throw new Error(
+          "Updated order details not found, or API returned empty result."
+        );
+      }
+
+      // Populate staffName for the fetchedOrder for consistency if needed for display later
+      fetchedOrder.staffName = fetchedOrder.staff?.name || "N/A";
+
+      const totalPaidAmount = (fetchedOrder.payments || []).reduce(
+        (acc, curr) => {
+          return curr.isPaid ? acc + curr.amount : acc;
+        },
+        0
+      );
+      const isFullyPaid = totalPaidAmount >= fetchedOrder.orderTotalPrice;
+
+      // After payment, simply refresh the order list.
+      // The `paymentStatus` will be updated by the backend.
+      // The admin/staff will then manually change the main order status to "order-completed" later.
+      fetchOrders(); // Refresh to show updated due amount and payment status badge
+
+      if (isFullyPaid) {
+        Swal.fire(
+          "Success",
+          `Order #${fetchedOrder.orderId} is now fully paid!`,
+          "success"
+        );
+      } else {
+        Swal.fire(
+          "Success",
+          `Payment recorded for Order #${
+            fetchedOrder.orderId
+          }. Balance remaining: ৳${(
+            fetchedOrder.orderTotalPrice - totalPaidAmount
+          ).toLocaleString("en-BD")}.`,
+          "info"
+        );
+      }
+    } catch (err) {
+      console.error("Error handling payment success callback:", err.message);
+      Swal.fire(
+        "Error",
+        "Error processing payment completion: " + err.message,
+        "error"
+      );
+      fetchOrders(); // Always refresh to ensure state consistency
+    }
+  };
+
+  // No longer a separate modal for manual status selection after partial payment.
+  // The user will manually change the status from the dropdown after checking the due.
+  const handleManualStatusSelection = async (newStatus) => {
+    if (!manualStatusUpdateOrder) return;
+
+    await handleStatusChange(manualStatusUpdateOrder.orderId, newStatus);
+    setManualStatusUpdateOrder(null); // Clear manual update state
+  };
+
   const closeOrderDetailsModal = () => setSelectedOrder(null);
 
   return (
@@ -658,16 +577,28 @@ export default function InProgressOrders() {
                         {order.status.replace(/-/g, " ")}
                       </summary>
                       <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 text-xs">
+                        {/* Always include "Add Payment" option first for clarity */}
+                        <li>
+                          <button
+                            onClick={() =>
+                              handleStatusChange(order.orderId, "add-payment")
+                            }
+                            className="text-info font-bold" // Highlight "Add Payment"
+                          >
+                            Add Payment
+                          </button>
+                        </li>
+                        <div className="divider my-0"></div> {/* Separator */}
+                        {/* Other status options */}
                         {[
-                          "advance-payment-received", // This page starts from here or later
+                          "advance-payment-received",
                           "design-in-progress",
                           "awaiting-design-approval",
                           "production-started",
                           "production-in-progress",
                           "ready-for-delivery",
                           "out-for-delivery",
-                          "order-completed",
-                          "order-canceled",
+                          // Add other statuses as needed
                         ].map((statusOption) => (
                           <li key={statusOption}>
                             <button
@@ -684,6 +615,42 @@ export default function InProgressOrders() {
                             </button>
                           </li>
                         ))}
+                        <div className="divider my-0"></div> {/* Separator */}
+                        {/* Move completion/cancellation to the bottom after divider */}
+                        <li>
+                          <button
+                            onClick={() =>
+                              handleStatusChange(
+                                order.orderId,
+                                "order-completed"
+                              )
+                            }
+                            className={
+                              order.status === "order-completed"
+                                ? "text-primary font-bold"
+                                : ""
+                            }
+                          >
+                            Mark Completed
+                          </button>
+                        </li>
+                        <li>
+                          <button
+                            onClick={() =>
+                              handleStatusChange(
+                                order.orderId,
+                                "order-canceled"
+                              )
+                            }
+                            className={
+                              order.status === "order-canceled"
+                                ? "text-error font-bold"
+                                : ""
+                            }
+                          >
+                            Mark Canceled
+                          </button>
+                        </li>
                       </ul>
                     </details>
                   </td>
@@ -705,6 +672,62 @@ export default function InProgressOrders() {
           setVisibleColumns={setVisibleColumns}
           onClose={() => setShowColumnManager(false)}
         />
+      )}
+
+      {/* Payment Modal Component for 'add-payment' trigger */}
+      {showPaymentModal && selectedOrderForPayment && (
+        <PaymentModal
+          order={selectedOrderForPayment}
+          onClose={() => setShowPaymentModal(false)}
+          onPaymentSuccess={() =>
+            handlePaymentSuccessAndStatusUpdate(selectedOrderForPayment.orderId)
+          }
+        />
+      )}
+
+      {/* Manual Status Update Modal (if payment recorded but still due, and user chose to manually update) */}
+      {manualStatusUpdateOrder && (
+        <dialog className="modal modal-open">
+          <div className="modal-box w-96 bg-white p-6 rounded-lg shadow-xl">
+            <h3 className="text-xl font-bold mb-4">
+              Update Order #{manualStatusUpdateOrder.orderId} Status
+            </h3>
+            <p className="mb-4 text-sm">
+              The payment for this order was recorded, but there is still a
+              balance due. Please select the new order status:
+            </p>
+            <div className="form-control">
+              <select
+                className="select select-bordered w-full"
+                onChange={(e) => handleManualStatusSelection(e.target.value)}
+              >
+                <option value="">Select Status</option>
+                {/* Dynamically generated options */}
+                {IN_PROGRESS_STATUSES.map((statusOption) => (
+                  <option key={statusOption} value={statusOption}>
+                    {statusOption.replace(/-/g, " ")}
+                  </option>
+                ))}
+                {/* Static options after the dynamic ones */}
+                <option value="order-completed">
+                  order completed (Force Complete)
+                </option>
+                <option value="order-canceled">order canceled</option>
+              </select>
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => {
+                  setManualStatusUpdateOrder(null);
+                  fetchOrders(); // Refresh table if user cancels
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </dialog>
       )}
 
       {/* General Order Details Modal */}
@@ -803,19 +826,28 @@ export default function InProgressOrders() {
               </h4>
               <ul className="list-disc ml-5 text-sm space-y-1">
                 {selectedOrder.orderItems?.length > 0 ? (
-                  selectedOrder.orderItems.map((item, idx) => (
-                    <li key={idx}>
-                      <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
-                      {item.quantity || 0}, Size:{" "}
-                      {item.widthInch && item.heightInch
-                        ? `${item.widthInch}x${item.heightInch} inch`
-                        : "N/A"}
-                      <div className="text-xs text-gray-500">
-                        SKU: {item.product?.sku || "N/A"} | Price: ৳
-                        {item.price?.toLocaleString("en-BD") || "0.00"}
-                      </div>
-                    </li>
-                  ))
+                  selectedOrder.orderItems.map((item, idx) => {
+                    const basePrice = Number(item.basePriceBeforeDiscount || 0);
+                    const discountAmount = Number(item.itemDiscountAmount || 0);
+                    const finalItemTotal = Number(item.price || 0);
+
+                    const actualDiscountPercentage =
+                      basePrice > 0 ? (discountAmount / basePrice) * 100 : 0;
+
+                    return (
+                      <li key={idx}>
+                        <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
+                        {item.quantity || 0}
+                        {item.widthInch && item.heightInch
+                          ? `${item.widthInch}x${item.heightInch} inch`
+                          : "N/A"}
+                        <div className="text-xs text-gray-500">
+                          SKU: {item.product?.sku || "N/A"} | Price: ৳
+                          {item.price?.toLocaleString("en-BD") || "0.00"}
+                        </div>
+                      </li>
+                    );
+                  })
                 ) : (
                   <li>No items found for this order.</li>
                 )}

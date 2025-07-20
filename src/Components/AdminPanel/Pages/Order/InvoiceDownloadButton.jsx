@@ -1,10 +1,7 @@
-
 import { jsPDF } from "jspdf";
 import { FaDownload } from "react-icons/fa";
 
-export default function InvoiceDownloadButton({ order,staffName }) {
-
-
+export default function InvoiceDownloadButton({ order, staffName }) {
   const generatePdf = () => {
     const doc = new jsPDF();
     let currentY = 30;
@@ -19,7 +16,11 @@ export default function InvoiceDownloadButton({ order,staffName }) {
     doc.text(`Order ID: ${order.orderId || "N/A"}`, 20, currentY);
     currentY += 5;
     doc.text(
-      `Date: ${order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : "N/A"}`,
+      `Date: ${
+        order.deliveryDate
+          ? new Date(order.deliveryDate).toLocaleDateString()
+          : "N/A"
+      }`,
       20,
       currentY
     );
@@ -41,7 +42,7 @@ export default function InvoiceDownloadButton({ order,staffName }) {
     doc.text("Product", 32, currentY);
     doc.text("Qty", 110, currentY);
     doc.text("Unit Price", 135, currentY);
-    
+
     doc.text("Total", 180, currentY, null, null, "right");
     currentY += 8;
 
@@ -56,7 +57,10 @@ export default function InvoiceDownloadButton({ order,staffName }) {
       const productName = item?.product?.name || "N/A";
       const qty = item?.quantity || 0;
       const rawUnitPrice = item?.price;
-      const unitPrice = typeof rawUnitPrice === "number" ? rawUnitPrice : parseFloat(rawUnitPrice) || 0;
+      const unitPrice =
+        typeof rawUnitPrice === "number"
+          ? rawUnitPrice
+          : parseFloat(rawUnitPrice) || 0;
       const total = unitPrice * qty;
       totalPrice += total;
 
@@ -72,7 +76,14 @@ export default function InvoiceDownloadButton({ order,staffName }) {
     // Grand Total
     doc.setFont("helvetica", "bold");
     currentY += 10;
-    doc.text(`Total Price: ${totalPrice.toFixed(2)} Tk`, 180, currentY, null, null, "right");
+    doc.text(
+      `Total Price: ${totalPrice.toFixed(2)} Tk`,
+      180,
+      currentY,
+      null,
+      null,
+      "right"
+    );
 
     // Save PDF
     doc.save(`Invoice_Order_${order.orderId}.pdf`);

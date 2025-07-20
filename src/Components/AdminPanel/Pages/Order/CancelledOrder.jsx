@@ -19,203 +19,15 @@ import {
   FaClipboardList, // Icons for order details modal
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
-import ColumnManager from "./ColumnManager"; // Import ColumnManager
 import DatePicker from "react-datepicker"; // Import DatePicker for consistency
 import "react-datepicker/dist/react-datepicker.css"; // Import DatePicker CSS for consistency
-import InvoiceDownloadButton from "./InvoiceDownloadButton"; // Import InvoiceDownloadButton for the details modal
 
-const statusBadge = (status) => {
-  const badgeClass =
-    "badge px-2 py-0.5 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]";
-  switch (status) {
-    case "pending":
-      return (
-        <span className={`${badgeClass} badge-error badge-outline`}>
-          Pending
-        </span>
-      );
-    case "partial":
-      return (
-        <span className={`${badgeClass} badge-info badge-outline`}>
-          Partial
-        </span>
-      );
-    case "paid":
-      return <span className={`${badgeClass} badge-success`}>Paid</span>;
-    case "order-canceled":
-      return <span className={`${badgeClass} badge-error`}>Canceled</span>;
-    default:
-      return <span className={`${badgeClass} badge-ghost`}>{status}</span>;
-  }
-};
+// Adjusted Import Paths for ColumnManager, InvoiceDownloadButton
+import ColumnManager from "./ColumnManager";
+import InvoiceDownloadButton from "./InvoiceDownloadButton";
 
-// Define all possible columns with their properties (consistent across all order pages)
-const ALL_COLUMNS = [
-  {
-    id: "orderId",
-    label: "Order ID",
-    dataKey: "orderId",
-    isSortable: true,
-    defaultVisible: true,
-  },
-  {
-    id: "customerName",
-    label: "Customer",
-    dataKey: "customerName",
-    isSortable: true,
-    defaultVisible: true,
-  },
-  {
-    id: "customerPhone",
-    label: "Phone",
-    dataKey: "customerPhone",
-    isSortable: false,
-    defaultVisible: true,
-  },
-  {
-    id: "billingAddress",
-    label: "Address",
-    dataKey: "billingAddress",
-    isSortable: false,
-    defaultVisible: true,
-  },
-  {
-    id: "orderItemsCount",
-    label: "Items",
-    dataKey: "orderItemsCount",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.orderItems?.length || 0,
-  },
-  {
-    id: "orderTotalPrice",
-    label: "Total (৳)",
-    dataKey: "orderTotalPrice",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => order.orderTotalPrice?.toLocaleString("en-BD") || "-",
-  },
-  // Added "Due" column
-  {
-    id: "amountDue",
-    label: "Due (৳)",
-    dataKey: "amountDue",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      (
-        order.orderTotalPrice -
-        (order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)
-      )?.toLocaleString("en-BD") || "-",
-  },
-  {
-    id: "paymentMethod",
-    label: "Payment Method",
-    dataKey: "paymentMethod",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.paymentMethod?.replace("-payment", "") || "-",
-  },
-  {
-    id: "paymentStatus",
-    label: "Payment Status",
-    dataKey: "paymentStatus",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => statusBadge(order.paymentStatus),
-  },
-  {
-    id: "status",
-    label: "Order Status",
-    dataKey: "status",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order) => statusBadge(order.status),
-  },
-  {
-    id: "deliveryMethod",
-    label: "Delivery Method",
-    dataKey: "deliveryMethod",
-    isSortable: false,
-    defaultVisible: false,
-  },
-  {
-    id: "deliveryDate",
-    label: "Delivery Date",
-    dataKey: "deliveryDate",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      order.deliveryDate
-        ? new Date(order.deliveryDate).toLocaleDateString()
-        : "N/A",
-  }, // Added for consistency
-  {
-    id: "createdAt",
-    label: "Created",
-    dataKey: "createdAt",
-    isSortable: true,
-    defaultVisible: false,
-    render: (order) =>
-      order.createdAt ? new Date(order.createdAt).toLocaleString() : "-",
-  },
-  {
-    id: "updatedAt",
-    label: "Cancelled",
-    dataKey: "updatedAt",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      order.updatedAt ? new Date(order.updatedAt).toLocaleString() : "-",
-  },
-  {
-    id: "customerEmail",
-    label: "Email",
-    dataKey: "customerEmail",
-    isSortable: true,
-    defaultVisible: false,
-  },
-  {
-    id: "additionalNotes",
-    label: "Notes",
-    dataKey: "additionalNotes",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.additionalNotes || "N/A",
-  },
-  {
-    id: "staffName",
-    label: "Agent",
-    dataKey: "staffName",
-    isSortable: true,
-    defaultVisible: false,
-  },
-  {
-    id: "orderDetails",
-    label: "Details",
-    dataKey: "orderDetails",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order, setSelectedOrder) => (
-      <button
-        onClick={() => setSelectedOrder(order)}
-        className="btn btn-outline btn-xs bg-blue-700 text-white"
-      >
-        View
-      </button>
-    ),
-  },
-  {
-    id: "invoiceDownload",
-    label: "Invoice",
-    dataKey: "invoiceDownload",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order) => (
-      <InvoiceDownloadButton order={order} staffName={order.staffName} />
-    ),
-  },
-];
+// Import the centralized column definitions and status badge utility
+import { ALL_COLUMNS, statusBadge } from "./columnDefinitions";
 
 // Define a unique localStorage key for this page's column configuration
 const LOCAL_STORAGE_COLUMNS_KEY = "orders_cancelled_page_columns";
@@ -629,19 +441,28 @@ export default function CancelledOrders() {
               </h4>
               <ul className="list-disc ml-5 text-sm space-y-1">
                 {selectedOrder.orderItems?.length > 0 ? (
-                  selectedOrder.orderItems.map((item, idx) => (
-                    <li key={idx}>
-                      <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
-                      {item.quantity || 0}, Size:{" "}
-                      {item.widthInch && item.heightInch
-                        ? `${item.widthInch}x${item.heightInch} inch`
-                        : "N/A"}
-                      <div className="text-xs text-gray-500">
-                        SKU: {item.product?.sku || "N/A"} | Price: ৳
-                        {item.price?.toLocaleString("en-BD") || "0.00"}
-                      </div>
-                    </li>
-                  ))
+                  selectedOrder.orderItems.map((item, idx) => {
+                    const basePrice = Number(item.basePriceBeforeDiscount || 0);
+                    const discountAmount = Number(item.itemDiscountAmount || 0);
+                    const finalItemTotal = Number(item.price || 0);
+
+                    const actualDiscountPercentage =
+                      basePrice > 0 ? (discountAmount / basePrice) * 100 : 0;
+
+                    return (
+                      <li key={idx}>
+                        <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
+                        {item.quantity || 0}
+                        {item.widthInch && item.heightInch
+                          ? `${item.widthInch}x${item.heightInch} inch`
+                          : "N/A"}
+                        <div className="text-xs text-gray-500">
+                          SKU: {item.product?.sku || "N/A"} | Price: ৳
+                          {item.price?.toLocaleString("en-BD") || "0.00"}
+                        </div>
+                      </li>
+                    );
+                  })
                 ) : (
                   <li>No items found for this order.</li>
                 )}

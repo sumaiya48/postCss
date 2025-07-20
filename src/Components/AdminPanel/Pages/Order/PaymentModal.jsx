@@ -5,6 +5,7 @@ import {
   FaDollarSign,
   FaInfoCircle,
 } from "react-icons/fa";
+import Swal from "sweetalert2"; // Import Swal
 
 export default function PaymentModal({ order, onClose, onPaymentSuccess }) {
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -12,9 +13,8 @@ export default function PaymentModal({ order, onClose, onPaymentSuccess }) {
   const [error, setError] = useState(null);
 
   // Calculate total due based on orderTotalPrice and existing payments
-  const totalDue =
-    order.orderTotalPrice -
-    (order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0);
+  const totalPaid = order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+  const totalDue = order.orderTotalPrice - totalPaid;
 
   const handlePaymentSubmit = async () => {
     const amount = parseFloat(paymentAmount);
@@ -37,8 +37,7 @@ export default function PaymentModal({ order, onClose, onPaymentSuccess }) {
     try {
       const token = localStorage.getItem("authToken");
 
-      // First API call: Record the payment
-      // Corrected API endpoint to match backend route: /add-payment
+      // API call: Record the payment
       const recordPaymentRes = await fetch(
         `https://test.api.dpmsign.com/api/order/add-payment`,
         {
@@ -51,9 +50,8 @@ export default function PaymentModal({ order, onClose, onPaymentSuccess }) {
             orderId: order.orderId,
             amount: amount,
             paymentMethod: order.paymentMethod, // Use existing method or allow selection
-            // Added customer details required by backend's validateOrderPaymentCreation middleware
             customerName: order.customerName,
-            customerEmail: order.customerEmail, // Can be null, backend allows it
+            customerEmail: order.customerEmail,
             customerPhone: order.customerPhone,
           }),
         }
@@ -61,39 +59,25 @@ export default function PaymentModal({ order, onClose, onPaymentSuccess }) {
 
       if (!recordPaymentRes.ok) {
         const errorData = await recordPaymentRes.json();
-        // Provide more detailed error from backend if available
         throw new Error(errorData.message || "Failed to record payment.");
       }
 
-      // Second API call: Update order status
-      // The paymentStatus update is handled by the backend's createOrderPayment controller
-      // so we only need to update the order's main status here.
-      const updateStatusRes = await fetch(
-        `https://test.api.dpmsign.com/api/order/update-order`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            orderId: order.orderId,
-            status: "advance-payment-received", // Set the status to move to In Progress
-            // Removed paymentStatus from here as it's handled by backend's add-payment logic
-          }),
-        }
-      );
+      // Show success message within the modal context
+      Swal.fire({
+        icon: "success",
+        title: "Payment Recorded!",
+        text: `৳${amount.toLocaleString("en-BD")} has been added to Order #${
+          order.orderId
+        }.`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
 
-      if (!updateStatusRes.ok) {
-        const errorData = await updateStatusRes.json();
-        throw new Error(
-          errorData.message || "Failed to update order status after payment."
-        );
-      }
-
-      onPaymentSuccess(); // Callback to parent to refresh order list
+      // Call the parent's success handler, passing the orderId
+      onPaymentSuccess(order.orderId); // Pass the orderId back
     } catch (err) {
       setError(err.message);
+      Swal.fire("Error", `Failed to record payment: ${err.message}`, "error");
     } finally {
       setLoading(false);
     }
@@ -124,9 +108,7 @@ export default function PaymentModal({ order, onClose, onPaymentSuccess }) {
           </p>
           <p className="flex items-center gap-2">
             <FaDollarSign /> <strong>Previously Paid:</strong> ৳
-            {(
-              order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0
-            ).toLocaleString("en-BD")}
+            {totalPaid.toLocaleString("en-BD")}
           </p>
           <p className="flex items-center gap-2 font-bold text-lg">
             <FaDollarSign /> <strong>Remaining Due:</strong> ৳
@@ -161,10 +143,11 @@ export default function PaymentModal({ order, onClose, onPaymentSuccess }) {
             disabled={
               loading ||
               parseFloat(paymentAmount) <= 0 ||
-              isNaN(parseFloat(paymentAmount))
+              isNaN(parseFloat(paymentAmount)) ||
+              parseFloat(paymentAmount) > totalDue // Disable if amount exceeds due
             }
           >
-            {loading ? "Processing..." : "Record Payment & Update Status"}
+            {loading ? "Processing..." : "Record Payment"}
           </button>
         </div>
       </div>

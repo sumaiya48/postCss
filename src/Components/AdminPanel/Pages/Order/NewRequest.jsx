@@ -19,250 +19,17 @@ import {
   FaClipboardList, // Icons for order details modal
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
-import ColumnManager from "./ColumnManager";
 import DatePicker from "react-datepicker"; // Import DatePicker
 import "react-datepicker/dist/react-datepicker.css"; // Import DatePicker CSS
-import PaymentModal from "./PaymentModal"; // Import PaymentModal
-import InvoiceDownloadButton from "./InvoiceDownloadButton"; // Import InvoiceDownloadButton for the details modal
+import Swal from "sweetalert2"; // Import Swal for confirmations/messages
 
-// Utility function to render status badges
-const statusBadge = (status) => {
-  const badgeClass =
-    "badge px-2 py-0.5 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]";
-  switch (status) {
-    case "pending":
-      return (
-        <span className={`${badgeClass} badge-error badge-outline`}>
-          Pending
-        </span>
-      );
-    case "partial": // Added partial payment status
-      return (
-        <span className={`${badgeClass} badge-info badge-outline`}>
-          Partial
-        </span>
-      );
-    case "paid":
-      return <span className={`${badgeClass} badge-success`}>Paid</span>;
-    case "order-request-received":
-      return <span className={`${badgeClass} badge-secondary`}>Request</span>;
-    case "consultation-in-progress":
-      return <span className={`${badgeClass} badge-primary`}>Consulting</span>;
-    case "awaiting-advance-payment":
-      return (
-        <span className={`${badgeClass} badge-warning`}>Awaiting Advance</span>
-      );
-    case "advance-payment-received":
-      return (
-        <span className={`${badgeClass} badge-info`}>Advance Received</span>
-      );
-    case "design-in-progress":
-      return (
-        <span className={`${badgeClass} badge-accent`}>Design In Progress</span>
-      );
-    case "awaiting-design-approval":
-      return (
-        <span className={`${badgeClass} badge-warning`}>
-          Awaiting Design Approval
-        </span>
-      );
-    case "production-started":
-      return (
-        <span className={`${badgeClass} badge-info`}>Production Started</span>
-      );
-    case "production-in-progress":
-      return (
-        <span className={`${badgeClass} badge-info`}>
-          Production In Progress
-        </span>
-      );
-    case "ready-for-delivery":
-      return (
-        <span className={`${badgeClass} badge-success`}>
-          Ready For Delivery
-        </span>
-      );
-    case "out-for-delivery":
-      return (
-        <span className={`${badgeClass} badge-primary`}>Out For Delivery</span>
-      );
-    case "order-completed":
-      return <span className={`${badgeClass} badge-success`}>Completed</span>;
-    case "order-canceled":
-      return <span className={`${badgeClass} badge-error`}>Canceled</span>;
-    default:
-      return <span className={`${badgeClass} badge-ghost`}>{status}</span>;
-  }
-};
+// Adjusted Import Paths for ColumnManager, PaymentModal, InvoiceDownloadButton
+import ColumnManager from "./ColumnManager";
+import PaymentModal from "./PaymentModal";
+import InvoiceDownloadButton from "./InvoiceDownloadButton";
 
-// Define all possible columns with their properties (consistent across all order pages)
-const ALL_COLUMNS = [
-  {
-    id: "orderId",
-    label: "Order ID",
-    dataKey: "orderId",
-    isSortable: true,
-    defaultVisible: true,
-  },
-  {
-    id: "customerName",
-    label: "Customer",
-    dataKey: "customerName",
-    isSortable: true,
-    defaultVisible: true,
-  },
-  {
-    id: "customerPhone",
-    label: "Phone",
-    dataKey: "customerPhone",
-    isSortable: false,
-    defaultVisible: true,
-  },
-  {
-    id: "billingAddress",
-    label: "Address",
-    dataKey: "billingAddress",
-    isSortable: false,
-    defaultVisible: true,
-  },
-  {
-    id: "orderItemsCount",
-    label: "Items",
-    dataKey: "orderItemsCount",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.orderItems?.length || 0,
-  },
-  {
-    id: "orderTotalPrice",
-    label: "Total (৳)",
-    dataKey: "orderTotalPrice",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => order.orderTotalPrice?.toLocaleString("en-BD") || "-",
-  },
-  // Added "Due" column
-  {
-    id: "amountDue",
-    label: "Due (৳)",
-    dataKey: "amountDue",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      (
-        order.orderTotalPrice -
-        (order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)
-      )?.toLocaleString("en-BD") || "-",
-  },
-  {
-    id: "paymentMethod",
-    label: "Payment Method",
-    dataKey: "paymentMethod",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.paymentMethod?.replace("-payment", "") || "-",
-  },
-  {
-    id: "paymentStatus",
-    label: "Payment Status",
-    dataKey: "paymentStatus",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => statusBadge(order.paymentStatus),
-  },
-  {
-    id: "status",
-    label: "Order Status",
-    dataKey: "status",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => statusBadge(order.status),
-  },
-  {
-    id: "deliveryMethod",
-    label: "Delivery Method",
-    dataKey: "deliveryMethod",
-    isSortable: false,
-    defaultVisible: false,
-  },
-  // Added deliveryDate to ALL_COLUMNS and made it dynamically editable
-  {
-    id: "deliveryDate",
-    label: "Delivery Date",
-    dataKey: "deliveryDate",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      order.deliveryDate
-        ? new Date(order.deliveryDate).toLocaleDateString()
-        : "N/A",
-  },
-  {
-    id: "createdAt",
-    label: "Created",
-    dataKey: "createdAt",
-    isSortable: true,
-    defaultVisible: false,
-    render: (order) =>
-      order.createdAt ? new Date(order.createdAt).toLocaleString() : "-",
-  },
-  {
-    id: "updatedAt",
-    label: "Last Updated",
-    dataKey: "updatedAt",
-    isSortable: true,
-    defaultVisible: false,
-    render: (order) =>
-      order.updatedAt ? new Date(order.updatedAt).toLocaleString() : "-",
-  },
-  {
-    id: "customerEmail",
-    label: "Email",
-    dataKey: "customerEmail",
-    isSortable: true,
-    defaultVisible: false,
-  },
-  {
-    id: "additionalNotes",
-    label: "Notes",
-    dataKey: "additionalNotes",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.additionalNotes || "N/A",
-  },
-  {
-    id: "staffName",
-    label: "Agent",
-    dataKey: "staffName",
-    isSortable: true,
-    defaultVisible: false,
-  }, // Assuming staffName is added to order objects
-  {
-    id: "orderDetails",
-    label: "Details",
-    dataKey: "orderDetails",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order, setSelectedOrder) => (
-      <button
-        onClick={() => setSelectedOrder(order)}
-        className="btn btn-outline btn-xs bg-blue-700 text-white"
-      >
-        View
-      </button>
-    ),
-  },
-  {
-    id: "invoiceDownload",
-    label: "Invoice",
-    dataKey: "invoiceDownload",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order) => (
-      <InvoiceDownloadButton order={order} staffName={order.staffName} />
-    ),
-  },
-];
+// Import the centralized column definitions and status badge utility
+import { ALL_COLUMNS, statusBadge } from "./columnDefinitions";
 
 // Define a unique localStorage key for this page's column configuration
 const LOCAL_STORAGE_COLUMNS_KEY = "orders_new_request_page_columns";
@@ -357,7 +124,7 @@ export default function NewRequest() {
         )
         .map((order) => ({
           ...order,
-          staffName: staffMap[order.staffId] || "N/A", // Add staffName to order object
+          staffName: order.staff?.name || "N/A", // Ensure correct access of staff name
         }));
 
       setOrders(newRequestOrders);
@@ -410,10 +177,9 @@ export default function NewRequest() {
   useEffect(() => {
     // Re-fetch orders only if staffList is loaded
     if (staffList.length > 0 || !loading) {
-      // Added !loading to prevent infinite loop on initial load
       fetchOrders();
     }
-  }, [staffList]); // Depend on staffList to ensure it's loaded before fetching orders
+  }, [staffList]);
 
   useEffect(() => {
     // Apply filters and sort whenever orders, searchTerm, sortField, or sortAsc changes
@@ -481,7 +247,6 @@ export default function NewRequest() {
           o.orderId === orderId ? { ...o, deliveryDate: date.toISOString() } : o
         )
       );
-      // No need to re-fetch all orders unless other changes are expected
       console.log("Delivery date updated successfully!");
     } catch (err) {
       console.error("Error updating delivery date:", err.message);
@@ -496,7 +261,7 @@ export default function NewRequest() {
         setSelectedOrderForPayment(orderToPay);
         setShowPaymentModal(true);
       }
-      return; // Prevent default status update
+      return; // Prevent default status update, payment modal will handle next steps
     }
 
     try {
@@ -521,8 +286,10 @@ export default function NewRequest() {
         throw new Error(errorData.message || "Failed to update status");
       }
 
-      // If the order is canceled or completed, remove it from this view
-      // Or if its status means it should move to 'In Progress' page
+      // --- REVERTED LOGIC FOR PAGE REMOVAL/REFRESH ---
+      // For "order-canceled" or "order-completed", remove the order from this page.
+      // For any other status change (like moving to an in-progress status from New Request),
+      // re-fetch orders to ensure it moves off this list and appears on the correct page.
       const statusRemovesFromPage =
         newStatus === "order-canceled" || newStatus === "order-completed";
 
@@ -531,23 +298,82 @@ export default function NewRequest() {
           prevOrders.filter((o) => o.orderId !== orderId)
         );
       } else {
-        // Otherwise, re-fetch to update the status in the current view
-        fetchOrders(); // Re-fetch to ensure the order is re-filtered correctly if its status changes
+        // Crucial for "advance-payment-received" to make the order disappear
+        // from New Requests and appear in In Progress.
+        fetchOrders();
       }
+      // --- END REVERTED LOGIC ---
 
-      // In a real app, use a custom modal/toast instead of alert
-      console.log("Order status updated successfully!");
+      Swal.fire(
+        "Success",
+        `Order status updated to "${newStatus.replace(/-/g, " ")}"!`,
+        "success"
+      );
     } catch (err) {
       console.error("Error updating order status:", err.message);
-      // In a real app, use a custom modal/toast instead of alert
+      Swal.fire(
+        "Error",
+        "Failed to update order status: " + err.message,
+        "error"
+      );
     }
   };
 
   // Callback function after successful payment from the modal
-  const handlePaymentSuccess = () => {
+  // This will primarily handle the case where a payment is made,
+  // then the order should disappear from New Requests and appear in In Progress.
+  const handlePaymentSuccess = async (orderIdFromModal) => {
+    // Get orderId from modal now
     setShowPaymentModal(false);
     setSelectedOrderForPayment(null);
-    fetchOrders(); // Re-fetch all orders to ensure the list is updated correctly (order moves to in-progress)
+
+    try {
+      const token = localStorage.getItem("authToken");
+      // Fetch the specific order by ID to get updated payment details and status
+      const orderRes = await fetch(
+        `https://test.api.dpmsign.com/api/order?searchTerm=${orderIdFromModal}&searchBy=order-id`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!orderRes.ok) {
+        const errorText = await orderRes.text();
+        console.error(
+          "Failed to fetch updated order after payment:",
+          errorText
+        );
+        throw new Error("Failed to fetch updated order details after payment.");
+      }
+
+      const updatedOrderData = await orderRes.json();
+      const fetchedOrder = updatedOrderData.orders?.[0];
+
+      if (!fetchedOrder) {
+        throw new Error("Updated order details not found after payment.");
+      }
+
+      // Display success message
+      Swal.fire(
+        "Success",
+        `Payment recorded for Order #${fetchedOrder.orderId}.`,
+        "success"
+      );
+
+      // Now, re-fetch the entire list for New Requests. The filter in fetchOrders()
+      // will automatically remove this order if its status or payment status
+      // makes it no longer a "new request".
+      fetchOrders();
+    } catch (err) {
+      console.error(
+        "Error handling payment success callback in NewRequest:",
+        err.message
+      );
+      Swal.fire(
+        "Error",
+        "Error processing payment completion: " + err.message,
+        "error"
+      );
+      fetchOrders(); // Always refresh even on error to attempt consistency
+    }
   };
 
   // Function to close the general order details modal
@@ -842,19 +668,43 @@ export default function NewRequest() {
               </h4>
               <ul className="list-disc ml-5 text-sm space-y-1">
                 {selectedOrder.orderItems?.length > 0 ? (
-                  selectedOrder.orderItems.map((item, idx) => (
-                    <li key={idx}>
-                      <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
-                      {item.quantity || 0}, Size:{" "}
-                      {item.widthInch && item.heightInch
-                        ? `${item.widthInch}x${item.heightInch} inch`
-                        : "N/A"}
-                      <div className="text-xs text-gray-500">
-                        SKU: {item.product?.sku || "N/A"} | Price: ৳
-                        {item.price?.toLocaleString("en-BD") || "0.00"}
-                      </div>
-                    </li>
-                  ))
+                  selectedOrder.orderItems.map((item, idx) => {
+                    const basePrice = Number(item.basePriceBeforeDiscount || 0);
+                    const discountAmount = Number(item.itemDiscountAmount || 0);
+                    const finalItemTotal = Number(item.price || 0);
+
+                    const actualDiscountPercentage =
+                      basePrice > 0 ? (discountAmount / basePrice) * 100 : 0;
+
+                    return (
+                      <li key={idx}>
+                        <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
+                        {item.quantity || 0}
+                        {item.widthInch && item.heightInch
+                          ? ` x Size: ${item.widthInch}x${item.heightInch} inch`
+                          : "N/A"}
+                        <div className="text-xs text-gray-500 mt-1">
+                          SKU: {item.product?.sku || "N/A"}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          Price Before Discount: ৳
+                          {basePrice.toLocaleString("en-BD")}
+                          {discountAmount > 0 && (
+                            <span className="text-green-700 ml-2">
+                              (Discount: ৳
+                              {discountAmount.toLocaleString("en-BD")} /{" "}
+                              {actualDiscountPercentage.toFixed(2)}%)
+                            </span>
+                          )}
+                          <br />
+                          <span className="font-bold">
+                            Final Item Price: ৳
+                            {finalItemTotal.toLocaleString("en-BD")}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })
                 ) : (
                   <li>No items found for this order.</li>
                 )}

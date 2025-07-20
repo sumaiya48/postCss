@@ -1,3 +1,4 @@
+// Order/Order.jsx
 import React, { useEffect, useState, useMemo } from "react";
 import {
   FaFileExcel,
@@ -13,303 +14,65 @@ import {
   FaTruck,
   FaCalendarAlt,
   FaClipboardList,
-  FaColumns, // Icon for column management
-  FaSortAlphaDown, // Icon for ascending sort
-  FaSortAlphaUp, // Icon for descending sort
+  FaColumns,
+  FaSortAlphaDown,
+  FaSortAlphaUp,
 } from "react-icons/fa";
-import * as XLSX from "xlsx"; // Library for Excel operations
-import { saveAs } from "file-saver"; // Library for saving files
-import InvoiceDownloadButton from "./InvoiceDownloadButton"; // Component to download invoice PDF
-import ColumnManager from "./ColumnManager"; // Component to manage visible table columns
-import DatePicker from "react-datepicker"; // Import DatePicker for consistency (even if read-only)
-import "react-datepicker/dist/react-datepicker.css"; // Import DatePicker CSS for consistency
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+
+// ADJUSTED IMPORTS
+import ColumnManager from "./ColumnManager";
+import InvoiceDownloadButton from "./InvoiceDownloadButton";
+import { ALL_COLUMNS, statusBadge } from "./columnDefinitions"; // ADJUSTED PATH
 
 // Utility function to get authentication token from local storage
 const getToken = () => localStorage.getItem("authToken");
 
-// Utility function to render status badges with dynamic styling
-const statusBadge = (status) => {
-  const base = "badge text-xs font-medium capitalize";
-  switch (status) {
-    case "pending":
-      return (
-        <span className={`${base} badge-error badge-outline`}>pending</span>
-      );
-    case "partial":
-      return (
-        <span className={`${base} badge-info badge-outline`}>partial</span>
-      );
-    case "paid":
-      return <span className={`${base} badge-success`}>paid</span>;
-    case "order-request-received":
-      return (
-        <span className={`${base} badge-secondary`}>
-          order request received
-        </span>
-      );
-    case "consultation-in-progress":
-      return (
-        <span className={`${base} badge-primary`}>
-          consultation in progress
-        </span>
-      );
-    case "order-canceled":
-      return <span className={`${base} badge-error`}>order canceled</span>;
-    case "awaiting-advance-payment":
-      return (
-        <span className={`${base} badge-warning`}>
-          awaiting advance payment
-        </span>
-      );
-    case "advance-payment-received":
-      return (
-        <span className={`${base} badge-info`}>advance payment received</span>
-      );
-    case "design-in-progress":
-      return <span className={`${base} badge-accent`}>design in progress</span>;
-    case "awaiting-design-approval":
-      return (
-        <span className={`${base} badge-warning`}>
-          awaiting design approval
-        </span>
-      );
-    case "production-started":
-      return <span className={`${base} badge-info`}>production started</span>;
-    case "production-in-progress":
-      return (
-        <span className={`${base} badge-info`}>production in progress</span>
-      );
-    case "ready-for-delivery":
-      return (
-        <span className={`${base} badge-success`}>ready for delivery</span>
-      );
-    case "out-for-delivery":
-      return <span className={`${base} badge-primary`}>out for delivery</span>;
-    case "order-completed":
-      return <span className={`${base} badge-success`}>order completed</span>;
-    default:
-      return <span className={base}>{status}</span>;
-  }
-};
-
-// Define all possible columns for the order table
-// Each column object includes properties for ID, label, data key, sortability,
-// default visibility, and an optional render function for custom cell content.
-const ALL_COLUMNS = [
-  {
-    id: "orderId",
-    label: "Order ID",
-    dataKey: "orderId",
-    isSortable: true,
-    defaultVisible: true,
-  },
-  {
-    id: "customerName",
-    label: "Customer",
-    dataKey: "customerName",
-    isSortable: true,
-    defaultVisible: true,
-  },
-  {
-    id: "customerPhone",
-    label: "Phone",
-    dataKey: "customerPhone",
-    isSortable: false,
-    defaultVisible: true,
-  },
-  {
-    id: "billingAddress",
-    label: "Address",
-    dataKey: "billingAddress",
-    isSortable: false,
-    defaultVisible: false,
-  },
-  {
-    id: "orderItemsCount",
-    label: "Items",
-    dataKey: "orderItemsCount",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order) => order.orderItems?.length || 0,
-  },
-  {
-    id: "orderTotalPrice",
-    label: "Total (৳)",
-    dataKey: "orderTotalPrice",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) => order.orderTotalPrice?.toLocaleString("en-BD") || "-",
-  },
-  // Added "Due" column
-  {
-    id: "amountDue",
-    label: "Due (৳)",
-    dataKey: "amountDue",
-    isSortable: true,
-    defaultVisible: true,
-    render: (order) =>
-      (
-        order.orderTotalPrice -
-        (order.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)
-      )?.toLocaleString("en-BD") || "-",
-  },
-  {
-    id: "paymentMethod",
-    label: "Payment Method",
-    dataKey: "paymentMethod",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.paymentMethod?.replace("-payment", "") || "-",
-  },
-  {
-    id: "paymentStatus",
-    label: "Payment Status",
-    dataKey: "paymentStatus",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => statusBadge(order.paymentStatus),
-  },
-  {
-    id: "status",
-    label: "Order Status",
-    dataKey: "status",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order) => statusBadge(order.status),
-  },
-  {
-    id: "deliveryMethod",
-    label: "Delivery Method",
-    dataKey: "deliveryMethod",
-    isSortable: false,
-    defaultVisible: false,
-  },
-  {
-    id: "deliveryDate",
-    label: "Delivery Date",
-    dataKey: "deliveryDate",
-    isSortable: true,
-    defaultVisible: false,
-    render: (order) =>
-      order.deliveryDate
-        ? new Date(order.deliveryDate).toLocaleDateString()
-        : "N/A",
-  },
-  {
-    id: "createdAt",
-    label: "Created",
-    dataKey: "createdAt",
-    isSortable: true,
-    defaultVisible: false,
-    render: (order) =>
-      order.createdAt ? new Date(order.createdAt).toLocaleString() : "-",
-  },
-  {
-    id: "updatedAt",
-    label: "Last Updated",
-    dataKey: "updatedAt",
-    isSortable: true,
-    defaultVisible: false,
-    render: (order) =>
-      order.updatedAt ? new Date(order.updatedAt).toLocaleString() : "-",
-  },
-  {
-    id: "customerEmail",
-    label: "Email",
-    dataKey: "customerEmail",
-    isSortable: true,
-    defaultVisible: false,
-  },
-  {
-    id: "additionalNotes",
-    label: "Notes",
-    dataKey: "additionalNotes",
-    isSortable: false,
-    defaultVisible: false,
-    render: (order) => order.additionalNotes || "N/A",
-  },
-  {
-    id: "staffName",
-    label: "Agent",
-    dataKey: "staffName",
-    isSortable: true,
-    defaultVisible: false,
-  },
-  {
-    id: "orderDetails",
-    label: "Details",
-    dataKey: "orderDetails",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order, setSelectedOrder) => (
-      <button
-        onClick={() => setSelectedOrder(order)}
-        className="btn btn-outline btn-xs bg-blue-700 text-white"
-      >
-        View
-      </button>
-    ),
-  },
-  {
-    id: "invoiceDownload",
-    label: "Invoice",
-    dataKey: "invoiceDownload",
-    isSortable: false,
-    defaultVisible: true,
-    render: (order) => (
-      <InvoiceDownloadButton order={order} staffName={order.staffName} />
-    ),
-  },
-];
+// REMOVE the duplicated statusBadge function and ALL_COLUMNS array from here.
 
 // Define a unique localStorage key for this page's column configuration
 const LOCAL_STORAGE_COLUMNS_KEY = "orders_all_page_columns";
 
 // Main component for "All Orders" page
 export default function Order() {
-  // State variables for order data, filtering, loading, and UI interactions
-  const [orders, setOrders] = useState([]); // Stores all fetched orders
-  const [filteredOrders, setFilteredOrders] = useState([]); // Stores orders after search/filter
-  const [staffList, setStaffList] = useState([]); // Stores list of staff for mapping
-  const [loading, setLoading] = useState(true); // Indicates if data is being fetched
-  const [error, setError] = useState(null); // Stores any error messages
-  const [searchTerm, setSearchTerm] = useState(""); // Current search input value
-  const [sortField, setSortField] = useState("createdAt"); // Field by which orders are currently sorted
-  const [sortAsc, setSortAsc] = useState(false); // Sort order (true for ascending, false for descending)
-  const [selectedOrder, setSelectedOrder] = useState(null); // Stores the order selected for modal view
-  const [currentPage, setCurrentPage] = useState(1); // Current page for pagination
-  const ordersPerPage = 10; // Number of orders to display per page
-  const [showColumnManager, setShowColumnManager] = useState(false); // Controls visibility of the column manager modal
+  const [orders, setOrders] = useState([]);
+  const [filteredOrders, setFilteredOrders] = useState([]);
+  const [staffList, setStaffList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortField, setSortField] = useState("createdAt");
+  const [sortAsc, setSortAsc] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ordersPerPage = 10;
+  const [showColumnManager, setShowColumnManager] = useState(false);
 
-  // State to manage which columns are currently visible in the table
-  // Initialized by attempting to load from localStorage, falling back to defaultVisible columns.
   const [visibleColumns, setVisibleColumns] = useState(() => {
     try {
       const savedColumns = localStorage.getItem(LOCAL_STORAGE_COLUMNS_KEY);
       if (savedColumns) {
         const parsedColumns = JSON.parse(savedColumns);
-        // Ensure parsed columns are still valid and map to full column objects
         return parsedColumns
           .map((id) => ALL_COLUMNS.find((col) => col.id === id))
           .filter(Boolean);
       }
     } catch (e) {
       console.error("Failed to parse visible columns from localStorage", e);
-      // Fallback to default if parsing fails
     }
     return ALL_COLUMNS.filter((col) => col.defaultVisible);
   });
 
-  // Effect to save visibleColumns to localStorage whenever it changes
   useEffect(() => {
-    // Only save the IDs of the visible columns to keep the stored data minimal
     localStorage.setItem(
       LOCAL_STORAGE_COLUMNS_KEY,
       JSON.stringify(visibleColumns.map((col) => col.id))
     );
   }, [visibleColumns]);
 
-  // Memoized map of staff IDs to staff names for efficient lookup
   const staffMap = useMemo(() => {
     const map = {};
     staffList.forEach((staff) => {
@@ -318,7 +81,6 @@ export default function Order() {
     return map;
   }, [staffList]);
 
-  // Function to fetch staff data from the API
   const fetchStaff = async () => {
     try {
       const token = getToken();
@@ -332,13 +94,11 @@ export default function Order() {
     }
   };
 
-  // Function to fetch all orders from the API
   const fetchOrders = async () => {
     setLoading(true);
     setError(null);
     try {
       const token = getToken();
-      // API endpoint to fetch all orders
       let url = "https://test.api.dpmsign.com/api/order";
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -346,14 +106,12 @@ export default function Order() {
       if (!res.ok) throw new Error("Failed to fetch orders");
       const data = await res.json();
 
-      // Map staff names to orders after fetching both staff and order data
       const allOrders = (data.data.orders || []).map((order) => ({
         ...order,
         staffName: staffMap[order.staffId] || "N/A",
       }));
 
       setOrders(allOrders);
-      // Apply initial search and sort after fetching all orders
       applyFiltersAndSort(allOrders, searchTerm, sortField, sortAsc);
     } catch (err) {
       setError(err.message);
@@ -362,23 +120,19 @@ export default function Order() {
     }
   };
 
-  // Helper function to apply search and sort logic to the current orders list
   const applyFiltersAndSort = (currentOrders, term, field, asc) => {
-    // Filter orders based on the search term (case-insensitive for name/email, direct match for phone/ID)
     let tempFiltered = currentOrders.filter(
       (o) =>
         o.customerName.toLowerCase().includes(term.toLowerCase()) ||
         o.customerPhone.includes(term) ||
         o.orderId.toString().includes(term) ||
-        o.customerEmail?.toLowerCase().includes(term.toLowerCase()) // Added email search
+        o.customerEmail?.toLowerCase().includes(term.toLowerCase())
     );
 
-    // Sort the filtered orders based on the selected field and order (ascending/descending)
     const sorted = [...tempFiltered].sort((a, b) => {
       const aVal = a[field];
       const bVal = b[field];
 
-      // Custom sorting logic for different data types
       if (field === "orderTotalPrice") {
         return asc ? aVal - bVal : bVal - aVal;
       }
@@ -394,38 +148,30 @@ export default function Order() {
       if (typeof aVal === "string") {
         return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       }
-      return 0; // No change in order if values are equal or type is not handled
+      return 0;
     });
     setFilteredOrders(sorted);
   };
 
-  // useEffect hook to fetch staff data once on component mount
   useEffect(() => {
     fetchStaff();
   }, []);
 
-  // useEffect hook to fetch orders after staff data is loaded or on initial load
-  // This ensures that staff names are available when orders are processed.
   useEffect(() => {
-    // Only fetch orders if staffList is loaded or if it's the initial load (to prevent infinite loop)
     if (staffList.length > 0 || !loading) {
       fetchOrders();
     }
-  }, [staffList]); // Dependency array: re-run when staffList changes
+  }, [staffList]);
 
-  // useEffect hook to re-apply filters and sort whenever the raw orders, search term,
-  // sort field, or sort order changes. This keeps the displayed data up-to-date.
   useEffect(() => {
     applyFiltersAndSort(orders, searchTerm, sortField, sortAsc);
   }, [orders, searchTerm, sortField, sortAsc]);
 
-  // Handler for search input changes
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1); // Reset to the first page when a new search is performed
+    setCurrentPage(1);
   };
 
-  // Function to export filtered orders data to an Excel file
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(filteredOrders);
     const workbook = XLSX.utils.book_new();
@@ -433,7 +179,6 @@ export default function Order() {
     XLSX.writeFile(workbook, "all_orders.xlsx");
   };
 
-  // Function to export filtered orders data to a CSV file
   const exportToCSV = () => {
     const worksheet = XLSX.utils.json_to_sheet(filteredOrders);
     const csv = XLSX.utils.sheet_to_csv(worksheet);
@@ -446,25 +191,20 @@ export default function Order() {
     document.body.removeChild(link);
   };
 
-  // Handler for sorting column headers when clicked
   const handleSort = (fieldId) => {
-    // Find the actual dataKey from ALL_COLUMNS based on the clicked column's ID
     const field =
       ALL_COLUMNS.find((col) => col.id === fieldId)?.dataKey || fieldId;
-    // Toggle sort order if the same field is clicked, otherwise default to ascending
     const asc = field === sortField ? !sortAsc : true;
     setSortField(field);
     setSortAsc(asc);
   };
 
-  // Pagination logic: calculate which orders to display on the current page
   const indexOfLastOrder = currentPage * ordersPerPage;
   const currentOrders = filteredOrders.slice(
     indexOfLastOrder - ordersPerPage,
     indexOfLastOrder
   );
 
-  // Function to close the order details modal by resetting selectedOrder state
   const closeOrderDetailsModal = () => setSelectedOrder(null);
 
   return (
@@ -477,7 +217,6 @@ export default function Order() {
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-        {/* Search input field */}
         <input
           type="text"
           placeholder="Search by name, phone, email, or order ID"
@@ -486,7 +225,6 @@ export default function Order() {
           onChange={handleSearch}
         />
         <div className="flex gap-2 flex-wrap items-center">
-          {/* Dropdowns for quick sorting options */}
           <select
             className="select select-sm select-bordered rounded-md"
             value={sortField}
@@ -507,7 +245,6 @@ export default function Order() {
             <option value={true}>Ascending</option>
           </select>
 
-          {/* Buttons for data export */}
           <button
             onClick={exportToExcel}
             className="btn btn-success btn-sm text-white shadow-md rounded-md hover:scale-105 transition-transform"
@@ -521,7 +258,6 @@ export default function Order() {
             <FaFileCsv className="mr-2" /> CSV
           </button>
 
-          {/* Button to open the Column Manager modal */}
           <button
             className="btn btn-sm btn-neutral text-white shadow-md rounded-md hover:scale-105 transition-transform"
             onClick={() => setShowColumnManager(true)}
@@ -531,9 +267,7 @@ export default function Order() {
         </div>
       </div>
 
-      {/* Main table display area */}
       <div className="bg-white rounded-xl shadow border overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto">
-        {/* Conditional rendering based on loading, error, or data availability */}
         {loading ? (
           <div className="p-6 text-center text-gray-500">Loading orders...</div>
         ) : error ? (
@@ -544,7 +278,6 @@ export default function Order() {
           <div className="p-6 text-center text-gray-500">No orders found.</div>
         ) : (
           <table className="table table-xs table-pin-rows">
-            {/* Table Header */}
             <thead className="bg-gray-100 text-gray-600 text-[11px] sticky top-0 z-10">
               <tr>
                 {visibleColumns.map((col) => (
@@ -568,7 +301,6 @@ export default function Order() {
                 <th>Actions</th>
               </tr>
             </thead>
-            {/* Table Body */}
             <tbody>
               {currentOrders.map((order, i) => (
                 <tr key={order.orderId || i} className="hover">
@@ -581,7 +313,6 @@ export default function Order() {
                           : ""
                       }
                     >
-                      {/* Render custom date picker for deliveryDate column (read-only) */}
                       {col.id === "deliveryDate" ? (
                         <div className="relative flex items-center">
                           <DatePicker
@@ -593,13 +324,13 @@ export default function Order() {
                             dateFormat="yyyy/MM/dd"
                             className="input input-xs input-bordered w-full pr-6"
                             wrapperClassName="w-full"
-                            disabled // Make it read-only for All Orders page
+                            disabled
                           />
                           <FaCalendarAlt className="absolute right-2 text-gray-400 pointer-events-none" />
                         </div>
-                      ) : col.id === "orderDetails" ? ( // Render "View" button for order details
+                      ) : col.id === "orderDetails" ? (
                         col.render(order, setSelectedOrder)
-                      ) : col.id === "invoiceDownload" ? ( // Render InvoiceDownloadButton
+                      ) : col.id === "invoiceDownload" ? (
                         col.render(order)
                       ) : col.render ? (
                         col.render(order)
@@ -609,14 +340,12 @@ export default function Order() {
                     </td>
                   ))}
                   <td>
-                    {/* Button to view order details in a modal */}
                     <button
                       onClick={() => setSelectedOrder(order)}
                       className="btn btn-outline btn-xs bg-blue-700 text-white rounded-md"
                     >
                       View
                     </button>
-                    {/* Invoice download button */}
                     <InvoiceDownloadButton
                       order={order}
                       staffName={order.staffName}
@@ -629,7 +358,6 @@ export default function Order() {
         )}
       </div>
 
-      {/* Pagination controls */}
       <div className="flex justify-center mt-4 space-x-2">
         {Array.from(
           { length: Math.ceil(filteredOrders.length / ordersPerPage) },
@@ -646,23 +374,20 @@ export default function Order() {
           )
         )}
       </div>
-      {/* Footer text showing number of entries */}
       <div className="p-4 text-xs text-gray-500 border-t text-right">
         Showing {filteredOrders.length} entr
         {filteredOrders.length === 1 ? "y" : "ies"}
       </div>
 
-      {/* Column Manager Modal */}
       {showColumnManager && (
         <ColumnManager
-          allColumns={ALL_COLUMNS} // Pass all defined columns
-          visibleColumns={visibleColumns} // Pass currently visible columns
-          setVisibleColumns={setVisibleColumns} // Pass setter to update visible columns
-          onClose={() => setShowColumnManager(false)} // Callback to close the modal
+          allColumns={ALL_COLUMNS}
+          visibleColumns={visibleColumns}
+          setVisibleColumns={setVisibleColumns}
+          onClose={() => setShowColumnManager(false)}
         />
       )}
 
-      {/* General Order Details Modal */}
       {selectedOrder && (
         <dialog className="modal modal-open">
           <div className="modal-box w-11/12 max-w-4xl bg-white p-6 rounded-lg shadow-xl">
@@ -758,19 +483,43 @@ export default function Order() {
               </h4>
               <ul className="list-disc ml-5 text-sm space-y-1">
                 {selectedOrder.orderItems?.length > 0 ? (
-                  selectedOrder.orderItems.map((item, idx) => (
-                    <li key={idx}>
-                      <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
-                      {item.quantity || 0}, Size:{" "}
-                      {item.widthInch && item.heightInch
-                        ? `${item.widthInch}x${item.heightInch} inch`
-                        : "N/A"}
-                      <div className="text-xs text-gray-500">
-                        SKU: {item.product?.sku || "N/A"} | Price: ৳
-                        {item.price?.toLocaleString("en-BD") || "0.00"}
-                      </div>
-                    </li>
-                  ))
+                  selectedOrder.orderItems.map((item, idx) => {
+                    const basePrice = Number(item.basePriceBeforeDiscount || 0);
+                    const discountAmount = Number(item.itemDiscountAmount || 0);
+                    const finalItemTotal = Number(item.price || 0);
+
+                    const actualDiscountPercentage =
+                      basePrice > 0 ? (discountAmount / basePrice) * 100 : 0;
+
+                    return (
+                      <li key={idx}>
+                        <strong>{item.product?.name || "N/A"}</strong> — Qty:{" "}
+                        {item.quantity || 0}
+                        {item.widthInch && item.heightInch
+                          ? ` x Size: ${item.widthInch}x${item.heightInch} inch`
+                          : "N/A"}
+                        <div className="text-xs text-gray-500 mt-1">
+                          SKU: {item.product?.sku || "N/A"}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          Price Before Discount: ৳
+                          {basePrice.toLocaleString("en-BD")}
+                          {discountAmount > 0 && (
+                            <span className="text-green-700 ml-2">
+                              (Discount: ৳
+                              {discountAmount.toLocaleString("en-BD")} /{" "}
+                              {actualDiscountPercentage.toFixed(2)}%)
+                            </span>
+                          )}
+                          <br />
+                          <span className="font-bold">
+                            Final Item Price: ৳
+                            {finalItemTotal.toLocaleString("en-BD")}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })
                 ) : (
                   <li>No items found for this order.</li>
                 )}

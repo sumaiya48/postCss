@@ -115,7 +115,7 @@ const InvoicePDF = ({
             <Text style={styles.cell}>{item.name}</Text>
             <Text style={styles.cell}>{item.quantity}</Text>
             <Text style={styles.cell}>
-              {/* Display customUnitPrice which is base + variant additional price */}
+              {/* Display customUnitPrice which is base + variant add-on price */}
               {Number(item.customUnitPrice).toFixed(2)} Tk
               {item.pricingType === "square-feet" &&
                 item.widthInch &&

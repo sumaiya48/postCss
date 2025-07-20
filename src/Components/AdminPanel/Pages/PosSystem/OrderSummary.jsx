@@ -19,11 +19,11 @@ export default function OrderSummary({
           <th>Name</th>
           <th>Variant</th>
           <th>Price (Unit/Sq.Ft)</th>
-          <th>Base Total</th> {/* NEW COLUMN HEADER */}
-          <th>Item Discount</th> {/* NEW COLUMN HEADER */}
+          <th>Regular</th> {/* NEW COLUMN HEADER */}
+          <th>Discount</th> {/* NEW COLUMN HEADER */}
           <th>Dimensions</th>
           <th>Qty</th>
-          <th>Final Total</th> {/* Renamed for clarity */}
+          <th>Total</th> {/* Renamed for clarity */}
           <th>Remove</th>
         </tr>
       </thead>
